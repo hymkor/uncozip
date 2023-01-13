@@ -61,7 +61,10 @@ func New(r io.Reader) (*CorruptedZip, error) {
 	return &CorruptedZip{br: br}, nil
 }
 
-func (cz *CorruptedZip) Scan() error {
+func (cz *CorruptedZip) Scan(
+	create func(fname string) (io.WriteCloser, error),
+	mkdir func(fname string) error) error {
+
 	br := cz.br
 	var header Header
 	if err := binary.Read(br, binary.LittleEndian, &header); err != nil {
@@ -87,7 +90,7 @@ func (cz *CorruptedZip) Scan() error {
 	var buffer bytes.Buffer
 	var w io.Writer
 	if fname[len(fname)-1] == '/' {
-		if err := os.Mkdir(fname, 0750); err != nil {
+		if err := mkdir(fname); err != nil {
 			if !os.IsExist(err) {
 				return err
 			}
@@ -102,7 +105,7 @@ func (cz *CorruptedZip) Scan() error {
 	}
 
 	if buffer.Len() > 0 {
-		fd, err := os.Create(fname)
+		fd, err := create(fname)
 		if err != nil {
 			return err
 		}
@@ -116,13 +119,39 @@ func (cz *CorruptedZip) Scan() error {
 	return nil
 }
 
-func mains() error {
-	cz, err := New(os.Stdin)
+func main1(r io.Reader) error {
+	cz, err := New(r)
 	if err != nil {
 		return err
 	}
+	create := func(fname string) (io.WriteCloser, error) {
+		return os.Create(fname)
+	}
+	mkdir := func(fname string) error {
+		return os.Mkdir(fname, 0644)
+	}
 	for {
-		if err := cz.Scan(); err != nil {
+		if err := cz.Scan(create, mkdir); err != nil {
+			if err != io.EOF {
+				return err
+			}
+			return nil
+		}
+	}
+}
+
+func mains(args []string) error {
+	if len(args) <= 0 {
+		return main1(os.Stdin)
+	}
+	for _, fname := range args {
+		fd, err := os.Open(fname)
+		if err != nil {
+			return err
+		}
+		err = main1(fd)
+		fd.Close()
+		if err != nil {
 			return err
 		}
 	}
@@ -130,7 +159,7 @@ func mains() error {
 }
 
 func main() {
-	if err := mains(); err != nil {
+	if err := mains(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
