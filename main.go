@@ -72,20 +72,16 @@ func New(r io.Reader) (*CorruptedZip, error) {
 	return &CorruptedZip{br: br}, nil
 }
 
-func (cz *CorruptedZip) Scan(
-	log io.Writer,
-	create func(fname string) (io.WriteCloser, error),
-	mkdir func(fname string) error) error {
-
+func (cz *CorruptedZip) Scan() (string, io.ReadCloser, error) {
 	br := cz.br
 	var header Header
 	if err := binary.Read(br, binary.LittleEndian, &header); err != nil {
-		return err
+		return "", nil, err
 	}
 	name := make([]byte, header.FilenameLength)
 
 	if _, err := io.ReadFull(br, name[:]); err != nil {
-		return err
+		return "", nil, err
 	}
 	var fname string
 	if (header.Bits & (1 << 11)) == 0 {
@@ -93,66 +89,50 @@ func (cz *CorruptedZip) Scan(
 		var err error
 		fname, err = mbcs.AtoU(name, mbcs.ACP)
 		if err != nil {
-			return err
+			return "", nil, err
 		}
 	} else {
 		// UTF8
 		fname = string(name)
 	}
 	fname = strings.TrimLeft(fname, "/")
-	fmt.Fprintln(log, fname)
 
 	// skip ExtendField
 	// println("ExtendField:", header.ExtendFieldSize)
 	if header.ExtendFieldSize > 0 {
 		if _, err := br.Discard(int(header.ExtendFieldSize)); err != nil {
-			return err
+			return "", nil, err
 		}
 	}
 	// skip data
 	// println("Compress Data:", header.CompressedSize)
 	var buffer bytes.Buffer
 	var w io.Writer
-	if fname[len(fname)-1] == '/' {
-		if err := mkdir(fname); err != nil {
-			if !os.IsExist(err) {
-				return err
-			}
-		}
+
+	isDir := fname[len(fname)-1] == '/'
+	if isDir {
 		w = io.Discard
 	} else {
 		w = &buffer
 	}
+
 	// seek the mark
 	if err := seekToSignature(br, pkSignature, w); err != nil && err != io.EOF {
-		return err
+		return "", nil, err
 	}
-
-	if buffer.Len() > 0 {
-		fd, err := create(fname)
-		if err != nil {
-			return err
-		}
-		defer fd.Close()
-
-		var r io.Reader
-
-		switch header.Method {
-		case methodDeflated:
-			zr := flate.NewReader(&buffer)
-			defer zr.Close()
-			r = zr
-		case methodNotCompressed:
-			r = &buffer
-		default:
-			return fmt.Errorf("Compression Method(%d) is not supported",
-				header.Method)
-		}
-		if _, err := io.Copy(fd, r); err != nil && err != io.EOF {
-			return err
-		}
+	if isDir {
+		return fname, nil, nil
 	}
-	return nil
+	switch header.Method {
+	case methodDeflated:
+		zr := flate.NewReader(&buffer)
+		return fname, zr, nil
+	case methodNotCompressed:
+		return fname, io.NopCloser(&buffer), nil
+	default:
+		return fname, nil, fmt.Errorf("Compression Method(%d) is not supported",
+			header.Method)
+	}
 }
 
 func main1(r io.Reader) error {
@@ -160,18 +140,26 @@ func main1(r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	create := func(fname string) (io.WriteCloser, error) {
-		return os.Create(fname)
-	}
-	mkdir := func(fname string) error {
-		return os.Mkdir(fname, 0644)
-	}
 	for {
-		if err := cz.Scan(os.Stderr, create, mkdir); err != nil {
-			if err != io.EOF {
+		fname, rc, err := cz.Scan()
+		if err != nil {
+			return err
+		}
+		if rc != nil {
+			fmt.Fprintln(os.Stderr, "Extract", fname)
+			fd, err := os.Create(fname)
+			if err != nil {
+				rc.Close()
 				return err
 			}
-			return nil
+			io.Copy(fd, rc)
+			rc.Close()
+			fd.Close()
+		} else {
+			fmt.Fprintln(os.Stderr, "Mkdir", fname)
+			if err := os.Mkdir(fname, 0644); err != nil && !os.IsExist(err) {
+				return err
+			}
 		}
 	}
 }
