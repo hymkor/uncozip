@@ -30,6 +30,9 @@ func seekToSignature(r *bufio.Reader, sig []byte, w io.Writer) error {
 	for i := 0; i < L; i++ {
 		ch, err := r.ReadByte()
 		if err != nil {
+			if i > 0 {
+				w.Write(sig[:i])
+			}
 			return err
 		}
 		if ch != sig[i] {
@@ -100,7 +103,7 @@ func (cz *CorruptedZip) Scan(
 		w = &buffer
 	}
 	// seek the mark
-	if err := seekToSignature(br, pkSignature, w); err != nil {
+	if err := seekToSignature(br, pkSignature, w); err != nil && err != io.EOF {
 		return err
 	}
 
