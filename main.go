@@ -31,33 +31,88 @@ type Header struct {
 	ExtendFieldSize  uint16
 }
 
-var pkSignature = []byte{'P', 'K', 0x03, 0x04}
+var _LocalFileHeaderSignature = []byte{'P', 'K', 3, 4}
+var _CentralDirectoryHeader = []byte{'P', 'K', 1, 2}
 
-func seekToSignature(r *bufio.Reader, sig []byte, w io.Writer) error {
-	L := len(sig)
-	for i := 0; i < L; i++ {
+func seekToSignature(r *bufio.Reader, w io.Writer) error {
+	for {
+		// Test the first byte is 'P'
 		ch, err := r.ReadByte()
 		if err != nil {
-			if i > 0 {
-				w.Write(sig[:i])
-			}
 			return err
 		}
-		if ch != sig[i] {
-			if i == 0 {
-				w.Write([]byte{ch})
-				i = -1
-			} else if ch == sig[0] {
-				w.Write(sig[:i])
-				i = 0
+		if ch != 'P' {
+			w.Write([]byte{ch})
+			continue
+		}
+
+		// Test the second byte is 'K'
+		ch, err = r.ReadByte()
+		if err != nil {
+			w.Write(_LocalFileHeaderSignature[:1])
+			return err
+		}
+		if ch != 'K' {
+			w.Write(_LocalFileHeaderSignature[:1])
+			if ch == 'P' {
+				r.UnreadByte()
 			} else {
-				w.Write(sig[:i])
 				w.Write([]byte{ch})
-				i = -1
 			}
+			continue
+		}
+
+		// Test the third byte is '\x03' or '\0x01'
+		ch, err = r.ReadByte()
+		if err != nil {
+			w.Write(_LocalFileHeaderSignature[:2])
+			return err
+		}
+		switch ch {
+		default:
+			w.Write(_LocalFileHeaderSignature[:2])
+			w.Write([]byte{ch})
+			continue
+		case 'P':
+			r.UnreadByte()
+			w.Write(_LocalFileHeaderSignature[:2])
+			continue
+		case '\x03': // next header
+			ch, err = r.ReadByte()
+			if err != nil {
+				w.Write(_LocalFileHeaderSignature[:3])
+				return err
+			}
+			if ch == 'P' {
+				r.UnreadByte()
+				w.Write(_LocalFileHeaderSignature[:3])
+				continue
+			}
+			if ch != '\x04' {
+				w.Write(_LocalFileHeaderSignature[:3])
+				w.Write([]byte{ch})
+				continue
+			}
+			return nil
+		case '\x01': // central directory header
+			ch, err = r.ReadByte()
+			if err != nil {
+				w.Write(_CentralDirectoryHeader[:3])
+				return err
+			}
+			if ch == 'P' {
+				r.UnreadByte()
+				w.Write(_CentralDirectoryHeader[:3])
+				continue
+			}
+			if ch != '\x02' {
+				w.Write(_CentralDirectoryHeader[:3])
+				w.Write([]byte{ch})
+				continue
+			}
+			return io.EOF
 		}
 	}
-	return nil
 }
 
 type CorruptedZip struct {
@@ -66,7 +121,7 @@ type CorruptedZip struct {
 
 func New(r io.Reader) (*CorruptedZip, error) {
 	br := bufio.NewReader(r)
-	if _, err := br.Discard(len(pkSignature)); err != nil {
+	if _, err := br.Discard(len(_LocalFileHeaderSignature)); err != nil {
 		return nil, err
 	}
 	return &CorruptedZip{br: br}, nil
@@ -74,6 +129,9 @@ func New(r io.Reader) (*CorruptedZip, error) {
 
 func (cz *CorruptedZip) Scan() (string, io.ReadCloser, error) {
 	br := cz.br
+	if br == nil {
+		return "", nil, io.EOF
+	}
 	var header Header
 	if err := binary.Read(br, binary.LittleEndian, &header); err != nil {
 		return "", nil, err
@@ -109,7 +167,7 @@ func (cz *CorruptedZip) Scan() (string, io.ReadCloser, error) {
 	var buffer bytes.Buffer
 	var w io.Writer
 
-	isDir := fname[len(fname)-1] == '/'
+	isDir := len(fname) > 0 && fname[len(fname)-1] == '/'
 	if isDir {
 		w = io.Discard
 	} else {
@@ -117,8 +175,12 @@ func (cz *CorruptedZip) Scan() (string, io.ReadCloser, error) {
 	}
 
 	// seek the mark
-	if err := seekToSignature(br, pkSignature, w); err != nil && err != io.EOF {
-		return "", nil, err
+	if err := seekToSignature(br, w); err != nil {
+		if err == io.EOF {
+			cz.br = nil
+		} else {
+			return "", nil, err
+		}
 	}
 	if isDir {
 		return fname, nil, nil
@@ -143,7 +205,10 @@ func main1(r io.Reader) error {
 	for {
 		fname, rc, err := cz.Scan()
 		if err != nil {
-			return err
+			if err != io.EOF {
+				return err
+			}
+			return nil
 		}
 		if rc != nil {
 			fmt.Fprintln(os.Stderr, "Extract", fname)
