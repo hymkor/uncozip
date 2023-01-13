@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/nyaosorg/go-windows-mbcs"
 )
@@ -98,6 +99,7 @@ func (cz *CorruptedZip) Scan(
 		// UTF8
 		fname = string(name)
 	}
+	fname = strings.TrimLeft(fname, "/")
 	fmt.Fprintln(log, fname)
 
 	// skip ExtendField
