@@ -211,7 +211,7 @@ func main1(r io.Reader) error {
 			return nil
 		}
 		if rc != nil {
-			fmt.Fprintln(os.Stderr, "Extract", fname)
+			fmt.Fprintln(os.Stderr, " extracting:", fname)
 			fd, err := os.Create(fname)
 			if err != nil {
 				rc.Close()
@@ -221,7 +221,7 @@ func main1(r io.Reader) error {
 			rc.Close()
 			fd.Close()
 		} else {
-			fmt.Fprintln(os.Stderr, "Mkdir", fname)
+			fmt.Fprintln(os.Stderr, "   creating:", fname)
 			if err := os.Mkdir(fname, 0644); err != nil && !os.IsExist(err) {
 				return err
 			}
