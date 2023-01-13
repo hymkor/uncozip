@@ -8,6 +8,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/nyaosorg/go-windows-mbcs"
+)
+
+const (
+	methodNotCompressed = 0
+	methodDeflated      = 8
 )
 
 type Header struct {
@@ -65,6 +72,7 @@ func New(r io.Reader) (*CorruptedZip, error) {
 }
 
 func (cz *CorruptedZip) Scan(
+	log io.Writer,
 	create func(fname string) (io.WriteCloser, error),
 	mkdir func(fname string) error) error {
 
@@ -78,8 +86,19 @@ func (cz *CorruptedZip) Scan(
 	if _, err := io.ReadFull(br, name[:]); err != nil {
 		return err
 	}
-	fname := string(name)
-	fmt.Printf("[%04d] %s\n", header.Method, fname)
+	var fname string
+	if (header.Bits & (1 << 11)) == 0 {
+		// not UTF8
+		var err error
+		fname, err = mbcs.AtoU(name, mbcs.ACP)
+		if err != nil {
+			return err
+		}
+	} else {
+		// UTF8
+		fname = string(name)
+	}
+	fmt.Fprintln(log, fname)
 
 	// skip ExtendField
 	// println("ExtendField:", header.ExtendFieldSize)
@@ -113,9 +132,21 @@ func (cz *CorruptedZip) Scan(
 			return err
 		}
 		defer fd.Close()
-		zr := flate.NewReader(&buffer)
-		defer zr.Close()
-		if _, err := io.Copy(fd, zr); err != nil && err != io.EOF {
+
+		var r io.Reader
+
+		switch header.Method {
+		case methodDeflated:
+			zr := flate.NewReader(&buffer)
+			defer zr.Close()
+			r = zr
+		case methodNotCompressed:
+			r = &buffer
+		default:
+			return fmt.Errorf("Compression Method(%d) is not supported",
+				header.Method)
+		}
+		if _, err := io.Copy(fd, r); err != nil && err != io.EOF {
 			return err
 		}
 	}
@@ -134,7 +165,7 @@ func main1(r io.Reader) error {
 		return os.Mkdir(fname, 0644)
 	}
 	for {
-		if err := cz.Scan(create, mkdir); err != nil {
+		if err := cz.Scan(os.Stderr, create, mkdir); err != nil {
 			if err != io.EOF {
 				return err
 			}
