@@ -33,7 +33,7 @@ type Header struct {
 var _LocalFileHeaderSignature = []byte{'P', 'K', 3, 4}
 var _CentralDirectoryHeader = []byte{'P', 'K', 1, 2}
 
-func seekToSignature(r *bufio.Reader, w io.Writer) error {
+func seekToSignature(r io.ByteScanner, w io.Writer) error {
 	for {
 		// Test the first byte is 'P'
 		ch, err := r.ReadByte()
