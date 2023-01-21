@@ -31,8 +31,12 @@ type Header struct {
 	ExtendFieldSize  uint16
 }
 
-var _LocalFileHeaderSignature = []byte{'P', 'K', 3, 4}
-var _CentralDirectoryHeader = []byte{'P', 'K', 1, 2}
+var (
+	_LocalFileHeaderSignature    = []byte{'P', 'K', 3, 4}
+	_CentralDirectoryHeader      = []byte{'P', 'K', 1, 2}
+	_EndOfCentralDirectoryRecord = []byte{'P', 'K', 5, 6} // not used.
+	_DataDescriptor              = []byte{'P', 'K', 7, 8} // not used.
+)
 
 var ErrTooNearEOF = errors.New("Too near EOF")
 
