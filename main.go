@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/flate"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -33,83 +34,39 @@ type Header struct {
 var _LocalFileHeaderSignature = []byte{'P', 'K', 3, 4}
 var _CentralDirectoryHeader = []byte{'P', 'K', 1, 2}
 
-func seekToSignature(r io.ByteScanner, w io.Writer) error {
+var ErrTooNearEOF = errors.New("Too near EOF")
+
+func seekToSignature(r io.ByteReader, w io.Writer) error {
+	const max = 100
+
+	buffer := make([]byte, 0, max)
 	for {
 		// Test the first byte is 'P'
 		ch, err := r.ReadByte()
 		if err != nil {
-			return err
-		}
-		if ch != 'P' {
-			w.Write([]byte{ch})
-			continue
-		}
-
-		// Test the second byte is 'K'
-		ch, err = r.ReadByte()
-		if err != nil {
-			w.Write(_LocalFileHeaderSignature[:1])
-			return err
-		}
-		if ch != 'K' {
-			w.Write(_LocalFileHeaderSignature[:1])
-			if ch == 'P' {
-				r.UnreadByte()
-			} else {
-				w.Write([]byte{ch})
+			if err == io.EOF {
+				return ErrTooNearEOF
 			}
-			continue
-		}
-
-		// Test the third byte is '\x03' or '\0x01'
-		ch, err = r.ReadByte()
-		if err != nil {
-			w.Write(_LocalFileHeaderSignature[:2])
 			return err
 		}
+		buffer = append(buffer, ch)
+
 		switch ch {
-		default:
-			w.Write(_LocalFileHeaderSignature[:2])
-			w.Write([]byte{ch})
-			continue
-		case 'P':
-			r.UnreadByte()
-			w.Write(_LocalFileHeaderSignature[:2])
-			continue
-		case '\x03': // next header
-			ch, err = r.ReadByte()
-			if err != nil {
-				w.Write(_LocalFileHeaderSignature[:3])
-				return err
+		case _LocalFileHeaderSignature[3]:
+			if bytes.HasSuffix(buffer, _LocalFileHeaderSignature) {
+				w.Write(buffer[:len(buffer)-4])
+				return nil
 			}
-			if ch == 'P' {
-				r.UnreadByte()
-				w.Write(_LocalFileHeaderSignature[:3])
-				continue
+		case _CentralDirectoryHeader[3]:
+			if bytes.HasSuffix(buffer, _CentralDirectoryHeader) {
+				w.Write(buffer[:len(buffer)-4])
+				return io.EOF
 			}
-			if ch != '\x04' {
-				w.Write(_LocalFileHeaderSignature[:3])
-				w.Write([]byte{ch})
-				continue
-			}
-			return nil
-		case '\x01': // central directory header
-			ch, err = r.ReadByte()
-			if err != nil {
-				w.Write(_CentralDirectoryHeader[:3])
-				return err
-			}
-			if ch == 'P' {
-				r.UnreadByte()
-				w.Write(_CentralDirectoryHeader[:3])
-				continue
-			}
-			if ch != '\x02' {
-				w.Write(_CentralDirectoryHeader[:3])
-				w.Write([]byte{ch})
-				continue
-			}
-			return io.EOF
+		}
+		if len(buffer) >= max {
+			w.Write(buffer[:len(buffer)-4])
+			copy(buffer[:4], buffer[len(buffer)-4:])
+			buffer = buffer[:4]
 		}
 	}
 }
