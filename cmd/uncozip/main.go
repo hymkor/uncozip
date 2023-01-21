@@ -13,14 +13,9 @@ func main1(r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	for {
-		fname, rc, err := cz.Scan()
-		if err != nil {
-			if err != io.EOF {
-				return err
-			}
-			return nil
-		}
+	for cz.Scan() {
+		fname := cz.Name()
+		rc := cz.Body()
 		if rc != nil {
 			fmt.Fprintln(os.Stderr, " extracting:", fname)
 			fd, err := os.Create(fname)
@@ -38,6 +33,10 @@ func main1(r io.Reader) error {
 			}
 		}
 	}
+	if cz.Err() != io.EOF {
+		return err
+	}
+	return nil
 }
 
 func mains(args []string) error {

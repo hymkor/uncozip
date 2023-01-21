@@ -76,7 +76,22 @@ func seekToSignature(r io.ByteReader, w io.Writer) error {
 }
 
 type CorruptedZip struct {
-	br *bufio.Reader
+	br   *bufio.Reader
+	name string
+	body io.ReadCloser
+	err  error
+}
+
+func (cz *CorruptedZip) Name() string {
+	return cz.name
+}
+
+func (cz *CorruptedZip) Err() error {
+	return cz.err
+}
+
+func (cz *CorruptedZip) Body() io.ReadCloser {
+	return cz.body
 }
 
 func New(r io.Reader) (*CorruptedZip, error) {
@@ -87,19 +102,23 @@ func New(r io.Reader) (*CorruptedZip, error) {
 	return &CorruptedZip{br: br}, nil
 }
 
-func (cz *CorruptedZip) Scan() (string, io.ReadCloser, error) {
+func (cz *CorruptedZip) Scan() bool {
 	br := cz.br
 	if br == nil {
-		return "", nil, io.EOF
+		cz.err = io.EOF
+		return false
 	}
+	cz.err = nil
 	var header Header
 	if err := binary.Read(br, binary.LittleEndian, &header); err != nil {
-		return "", nil, err
+		cz.err = err
+		return false
 	}
 	name := make([]byte, header.FilenameLength)
 
 	if _, err := io.ReadFull(br, name[:]); err != nil {
-		return "", nil, err
+		cz.err = err
+		return false
 	}
 	var fname string
 	if (header.Bits & (1 << 11)) == 0 {
@@ -107,19 +126,22 @@ func (cz *CorruptedZip) Scan() (string, io.ReadCloser, error) {
 		var err error
 		fname, err = mbcs.AtoU(name, mbcs.ACP)
 		if err != nil {
-			return "", nil, err
+			cz.err = err
+			return false
 		}
 	} else {
 		// UTF8
 		fname = string(name)
 	}
 	fname = strings.TrimLeft(fname, "/")
+	cz.name = fname
 
 	// skip ExtendField
 	// println("ExtendField:", header.ExtendFieldSize)
 	if header.ExtendFieldSize > 0 {
 		if _, err := br.Discard(int(header.ExtendFieldSize)); err != nil {
-			return "", nil, err
+			cz.err = err
+			return false
 		}
 	}
 	// skip data
@@ -139,20 +161,24 @@ func (cz *CorruptedZip) Scan() (string, io.ReadCloser, error) {
 		if err == io.EOF {
 			cz.br = nil
 		} else {
-			return "", nil, err
+			cz.err = err
+			return false
 		}
 	}
 	if isDir {
-		return fname, nil, nil
+		cz.body = nil
+		return true
 	}
 	switch header.Method {
 	case methodDeflated:
-		zr := flate.NewReader(&buffer)
-		return fname, zr, nil
+		cz.body = flate.NewReader(&buffer)
+		return true
 	case methodNotCompressed:
-		return fname, io.NopCloser(&buffer), nil
+		cz.body = io.NopCloser(&buffer)
+		return true
 	default:
-		return fname, nil, fmt.Errorf("Compression Method(%d) is not supported",
-			header.Method)
+		cz.body = nil
+		cz.err = fmt.Errorf("Compression Method(%d) is not supported", header.Method)
+		return false
 	}
 }
