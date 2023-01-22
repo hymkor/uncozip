@@ -116,7 +116,11 @@ func (cz *CorruptedZip) Scan() bool {
 	if !cz.nextSignatureAlreadyRead {
 		var signature [4]byte
 		if _, err := io.ReadFull(br, signature[:]); err != nil {
-			cz.err = ErrTooNearEOF
+			if err == io.EOF {
+				cz.err = ErrTooNearEOF
+			} else {
+				cz.err = err
+			}
 			return false
 		}
 		if bytes.Equal(signature[:], _CentralDirectoryHeader) {
@@ -131,13 +135,21 @@ func (cz *CorruptedZip) Scan() bool {
 
 	var header Header
 	if err := binary.Read(br, binary.LittleEndian, &header); err != nil {
-		cz.err = err
+		if err == io.EOF {
+			cz.err = ErrTooNearEOF
+		} else {
+			cz.err = err
+		}
 		return false
 	}
 	name := make([]byte, header.FilenameLength)
 
 	if _, err := io.ReadFull(br, name[:]); err != nil {
-		cz.err = err
+		if err == io.EOF {
+			cz.err = ErrTooNearEOF
+		} else {
+			cz.err = err
+		}
 		return false
 	}
 	var fname string
@@ -158,7 +170,11 @@ func (cz *CorruptedZip) Scan() bool {
 	// println("ExtendField:", header.ExtendFieldSize)
 	if header.ExtendFieldSize > 0 {
 		if _, err := br.Discard(int(header.ExtendFieldSize)); err != nil {
-			cz.err = err
+			if err == io.EOF {
+				cz.err = ErrTooNearEOF
+			} else {
+				cz.err = err
+			}
 			return false
 		}
 	}
@@ -188,7 +204,11 @@ func (cz *CorruptedZip) Scan() bool {
 	} else {
 		// println("bitDataDescriptorUsed is not set")
 		if _, err := io.CopyN(w, br, int64(header.CompressedSize)); err != nil {
-			cz.err = err
+			if err == io.EOF {
+				cz.err = ErrTooNearEOF
+			} else {
+				cz.err = err
+			}
 			return false
 		}
 		cz.nextSignatureAlreadyRead = false
