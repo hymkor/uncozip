@@ -19,6 +19,8 @@ const (
 
 	bitDataDescriptorUsed = 1 << 3
 	bitEncodedUTF8        = 1 << 11
+
+	sigSize = 4
 )
 
 type LocalFileHeader struct {
@@ -58,21 +60,21 @@ func seekToSignature(r io.ByteReader, w io.Writer) (bool, error) {
 		buffer = append(buffer, ch)
 
 		switch ch {
-		case _LocalFileHeaderSignature[3]:
+		case _LocalFileHeaderSignature[sigSize-1]:
 			if bytes.HasSuffix(buffer, _LocalFileHeaderSignature) {
-				w.Write(buffer[:len(buffer)-4])
+				w.Write(buffer[:len(buffer)-sigSize])
 				return true, nil
 			}
-		case _CentralDirectoryHeader[3]:
+		case _CentralDirectoryHeader[sigSize-1]:
 			if bytes.HasSuffix(buffer, _CentralDirectoryHeader) {
-				w.Write(buffer[:len(buffer)-4])
+				w.Write(buffer[:len(buffer)-sigSize])
 				return false, nil
 			}
 		}
 		if len(buffer) >= max {
-			w.Write(buffer[:len(buffer)-4])
-			copy(buffer[:4], buffer[len(buffer)-4:])
-			buffer = buffer[:4]
+			w.Write(buffer[:len(buffer)-sigSize])
+			copy(buffer[:sigSize], buffer[len(buffer)-sigSize:])
+			buffer = buffer[:sigSize]
 		}
 	}
 }
