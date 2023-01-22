@@ -46,7 +46,7 @@ var (
 	ErrLocalFileHeaderSignatureNotFound = errors.New("Signature not found")
 )
 
-func seekToSignature(r io.ByteReader, w io.Writer) error {
+func seekToSignature(r io.ByteReader, w io.Writer) (bool, error) {
 	const max = 100
 
 	buffer := make([]byte, 0, max)
@@ -54,10 +54,7 @@ func seekToSignature(r io.ByteReader, w io.Writer) error {
 		// Test the first byte is 'P'
 		ch, err := r.ReadByte()
 		if err != nil {
-			if err == io.EOF {
-				return ErrTooNearEOF
-			}
-			return err
+			return false, err
 		}
 		buffer = append(buffer, ch)
 
@@ -65,12 +62,12 @@ func seekToSignature(r io.ByteReader, w io.Writer) error {
 		case _LocalFileHeaderSignature[3]:
 			if bytes.HasSuffix(buffer, _LocalFileHeaderSignature) {
 				w.Write(buffer[:len(buffer)-4])
-				return nil
+				return true, nil
 			}
 		case _CentralDirectoryHeader[3]:
 			if bytes.HasSuffix(buffer, _CentralDirectoryHeader) {
 				w.Write(buffer[:len(buffer)-4])
-				return io.EOF
+				return false, nil
 			}
 		}
 		if len(buffer) >= max {
@@ -192,13 +189,17 @@ func (cz *CorruptedZip) Scan() bool {
 
 	if (header.Bits & bitDataDescriptorUsed) != 0 {
 		//println("bitDataDescriptorUsed is not set")
-		if err := seekToSignature(br, w); err != nil {
+		cont, err := seekToSignature(br, w)
+		if err != nil {
 			if err == io.EOF {
-				cz.br = nil
+				cz.err = ErrTooNearEOF
 			} else {
 				cz.err = err
-				return false
 			}
+			return false
+		}
+		if !cont {
+			cz.br = nil
 		}
 		cz.nextSignatureAlreadyRead = true
 	} else {
