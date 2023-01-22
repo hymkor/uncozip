@@ -39,15 +39,15 @@ func testCRC32FromReader(r io.Reader) error {
 			if err1 != nil {
 				return err1
 			}
-			result := h.Sum32()
+			checksum := h.Sum32()
 			if *flagDebug {
 				fmt.Fprintf(os.Stderr, "%s: CRC32: header=%X , body=%X\n",
-					cz.Name(), cz.Header.CRC32, result)
+					cz.Name(), cz.Header.CRC32, checksum)
 			}
-			if result != cz.Header.CRC32 {
+			if checksum != cz.Header.CRC32 {
 				fmt.Fprintf(os.Stderr,
 					"NG:   %s: CRC32 is expected %X in header, but %X\n",
-					cz.Name(), cz.Header.CRC32, result)
+					cz.Name(), cz.Header.CRC32, checksum)
 			} else {
 				fmt.Fprintf(os.Stderr, "OK:   %s\n", cz.Name())
 			}
@@ -86,11 +86,28 @@ func unzipFromReader(r io.Reader) error {
 				rc.Close()
 				return err
 			}
-			_, err = io.Copy(fd, rc)
-			rc.Close()
-			fd.Close()
+			h := crc32.NewIEEE()
+			_, err = io.Copy(fd, io.TeeReader(rc, h))
+			err1 := rc.Close()
+			err2 := fd.Close()
 			if err != nil {
 				return err
+			}
+			if err1 != nil {
+				return err1
+			}
+			if err2 != nil {
+				return err2
+			}
+			checksum := h.Sum32()
+			if *flagDebug {
+				fmt.Fprintf(os.Stderr, "%s: CRC32: header=%X , body=%X\n",
+					cz.Name(), cz.Header.CRC32, checksum)
+			}
+			if checksum != cz.Header.CRC32 {
+				fmt.Fprintf(os.Stderr,
+					"NG:   %s: CRC32 is expected %X in header, but %X\n",
+					cz.Name(), cz.Header.CRC32, checksum)
 			}
 		} else {
 			fmt.Fprintln(os.Stderr, "   creating:", fname)
