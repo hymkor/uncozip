@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -8,16 +9,28 @@ import (
 	"github.com/hymkor/uncozip"
 )
 
+var flagDebug = flag.Bool("debug", false, "Enable debug output")
+
 func main1(r io.Reader) error {
 	cz, err := uncozip.New(r)
 	if err != nil {
 		return err
 	}
+	if *flagDebug {
+		cz.Debug = func(args ...any) (int, error) {
+			return fmt.Fprintln(os.Stderr, args...)
+		}
+	}
 	for cz.Scan() {
 		fname := cz.Name()
 		rc := cz.Body()
 		if rc != nil {
-			fmt.Fprintln(os.Stderr, " extracting:", fname)
+			switch cz.Header.Method {
+			case uncozip.Deflated:
+				fmt.Fprintln(os.Stderr, "  inflating:", fname)
+			case uncozip.NotCompressed:
+				fmt.Fprintln(os.Stderr, " extracting:", fname)
+			}
 			fd, err := os.Create(fname)
 			if err != nil {
 				rc.Close()
@@ -61,7 +74,8 @@ func mains(args []string) error {
 }
 
 func main() {
-	if err := mains(os.Args[1:]); err != nil {
+	flag.Parse()
+	if err := mains(flag.Args()); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}

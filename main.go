@@ -14,14 +14,14 @@ import (
 )
 
 const (
-	methodNotCompressed = 0
-	methodDeflated      = 8
+	NotCompressed = 0
+	Deflated      = 8
 
 	bitDataDescriptorUsed = 1 << 3
 	bitEncodedUTF8        = 1 << 11
 )
 
-type Header struct {
+type LocalFileHeader struct {
 	RequiredVersion  int16
 	Bits             int16
 	Method           int16
@@ -51,7 +51,6 @@ func seekToSignature(r io.ByteReader, w io.Writer) (bool, error) {
 
 	buffer := make([]byte, 0, max)
 	for {
-		// Test the first byte is 'P'
 		ch, err := r.ReadByte()
 		if err != nil {
 			return false, err
@@ -84,6 +83,9 @@ type CorruptedZip struct {
 	body                     io.ReadCloser
 	err                      error
 	nextSignatureAlreadyRead bool
+
+	Debug  func(...any) (int, error)
+	Header LocalFileHeader
 }
 
 func (cz *CorruptedZip) Name() string {
@@ -99,7 +101,10 @@ func (cz *CorruptedZip) Body() io.ReadCloser {
 }
 
 func New(r io.Reader) (*CorruptedZip, error) {
-	return &CorruptedZip{br: bufio.NewReader(r)}, nil
+	return &CorruptedZip{
+		br:    bufio.NewReader(r),
+		Debug: func(...any) (int, error) { return 0, nil },
+	}, nil
 }
 
 func (cz *CorruptedZip) Scan() bool {
@@ -130,8 +135,7 @@ func (cz *CorruptedZip) Scan() bool {
 		}
 	}
 
-	var header Header
-	if err := binary.Read(br, binary.LittleEndian, &header); err != nil {
+	if err := binary.Read(br, binary.LittleEndian, &cz.Header); err != nil {
 		if err == io.EOF {
 			cz.err = ErrTooNearEOF
 		} else {
@@ -139,7 +143,7 @@ func (cz *CorruptedZip) Scan() bool {
 		}
 		return false
 	}
-	name := make([]byte, header.FilenameLength)
+	name := make([]byte, cz.Header.FilenameLength)
 
 	if _, err := io.ReadFull(br, name[:]); err != nil {
 		if err == io.EOF {
@@ -150,7 +154,7 @@ func (cz *CorruptedZip) Scan() bool {
 		return false
 	}
 	var fname string
-	if (header.Bits & bitEncodedUTF8) != 0 {
+	if (cz.Header.Bits & bitEncodedUTF8) != 0 {
 		fname = string(name)
 	} else {
 		var err error
@@ -164,9 +168,9 @@ func (cz *CorruptedZip) Scan() bool {
 	cz.name = fname
 
 	// skip ExtendField
-	// println("ExtendField:", header.ExtendFieldSize)
-	if header.ExtendFieldSize > 0 {
-		if _, err := br.Discard(int(header.ExtendFieldSize)); err != nil {
+	cz.Debug("LocalFileHeader.ExtendField:", cz.Header.ExtendFieldSize)
+	if cz.Header.ExtendFieldSize > 0 {
+		if _, err := br.Discard(int(cz.Header.ExtendFieldSize)); err != nil {
 			if err == io.EOF {
 				cz.err = ErrTooNearEOF
 			} else {
@@ -175,8 +179,7 @@ func (cz *CorruptedZip) Scan() bool {
 			return false
 		}
 	}
-	// skip data
-	// println("Compress Data:", header.CompressedSize)
+	cz.Debug("LocalFileHeader.Compress Data:", cz.Header.CompressedSize)
 	var buffer bytes.Buffer
 	var w io.Writer
 
@@ -187,8 +190,8 @@ func (cz *CorruptedZip) Scan() bool {
 		w = &buffer
 	}
 
-	if (header.Bits & bitDataDescriptorUsed) != 0 {
-		//println("bitDataDescriptorUsed is not set")
+	if (cz.Header.Bits & bitDataDescriptorUsed) != 0 {
+		cz.Debug("LocalFileHeader.Bits: bitDataDescriptorUsed is set")
 		cont, err := seekToSignature(br, w)
 		if err != nil {
 			if err == io.EOF {
@@ -203,8 +206,8 @@ func (cz *CorruptedZip) Scan() bool {
 		}
 		cz.nextSignatureAlreadyRead = true
 	} else {
-		// println("bitDataDescriptorUsed is not set")
-		if _, err := io.CopyN(w, br, int64(header.CompressedSize)); err != nil {
+		cz.Debug("LocalFileHeader.Bits: bitDataDescriptorUsed is not set")
+		if _, err := io.CopyN(w, br, int64(cz.Header.CompressedSize)); err != nil {
 			if err == io.EOF {
 				cz.err = ErrTooNearEOF
 			} else {
@@ -218,16 +221,16 @@ func (cz *CorruptedZip) Scan() bool {
 		cz.body = nil
 		return true
 	}
-	switch header.Method {
-	case methodDeflated:
+	switch cz.Header.Method {
+	case Deflated:
 		cz.body = flate.NewReader(&buffer)
 		return true
-	case methodNotCompressed:
+	case NotCompressed:
 		cz.body = io.NopCloser(&buffer)
 		return true
 	default:
 		cz.body = nil
-		cz.err = fmt.Errorf("Compression Method(%d) is not supported", header.Method)
+		cz.err = fmt.Errorf("Compression Method(%d) is not supported", cz.Header.Method)
 		return false
 	}
 }
