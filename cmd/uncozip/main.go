@@ -23,9 +23,12 @@ func main1(r io.Reader) error {
 				rc.Close()
 				return err
 			}
-			io.Copy(fd, rc)
+			_, err = io.Copy(fd, rc)
 			rc.Close()
 			fd.Close()
+			if err != nil {
+				return err
+			}
 		} else {
 			fmt.Fprintln(os.Stderr, "   creating:", fname)
 			if err := os.Mkdir(fname, 0644); err != nil && !os.IsExist(err) {
@@ -33,7 +36,7 @@ func main1(r io.Reader) error {
 			}
 		}
 	}
-	if cz.Err() != io.EOF {
+	if err := cz.Err(); err != io.EOF {
 		return err
 	}
 	return nil

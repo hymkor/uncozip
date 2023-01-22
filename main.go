@@ -16,6 +16,9 @@ import (
 const (
 	methodNotCompressed = 0
 	methodDeflated      = 8
+
+	bitDataDescriptorUsed = 1 << 3
+	bitEncodedUTF8        = 1 << 11
 )
 
 type Header struct {
@@ -38,7 +41,10 @@ var (
 	_DataDescriptor              = []byte{'P', 'K', 7, 8} // not used.
 )
 
-var ErrTooNearEOF = errors.New("Too near EOF")
+var (
+	ErrTooNearEOF                       = errors.New("Too near EOF")
+	ErrLocalFileHeaderSignatureNotFound = errors.New("Signature not found")
+)
 
 func seekToSignature(r io.ByteReader, w io.Writer) error {
 	const max = 100
@@ -76,10 +82,11 @@ func seekToSignature(r io.ByteReader, w io.Writer) error {
 }
 
 type CorruptedZip struct {
-	br   *bufio.Reader
-	name string
-	body io.ReadCloser
-	err  error
+	br                       *bufio.Reader
+	name                     string
+	body                     io.ReadCloser
+	err                      error
+	nextSignatureAlreadyRead bool
 }
 
 func (cz *CorruptedZip) Name() string {
@@ -95,11 +102,7 @@ func (cz *CorruptedZip) Body() io.ReadCloser {
 }
 
 func New(r io.Reader) (*CorruptedZip, error) {
-	br := bufio.NewReader(r)
-	if _, err := br.Discard(len(_LocalFileHeaderSignature)); err != nil {
-		return nil, err
-	}
-	return &CorruptedZip{br: br}, nil
+	return &CorruptedZip{br: bufio.NewReader(r)}, nil
 }
 
 func (cz *CorruptedZip) Scan() bool {
@@ -109,6 +112,23 @@ func (cz *CorruptedZip) Scan() bool {
 		return false
 	}
 	cz.err = nil
+
+	if !cz.nextSignatureAlreadyRead {
+		var signature [4]byte
+		if _, err := io.ReadFull(br, signature[:]); err != nil {
+			cz.err = ErrTooNearEOF
+			return false
+		}
+		if bytes.Equal(signature[:], _CentralDirectoryHeader) {
+			cz.err = io.EOF
+			return false
+		}
+		if !bytes.Equal(signature[:], _LocalFileHeaderSignature) {
+			cz.err = ErrLocalFileHeaderSignatureNotFound
+			return false
+		}
+	}
+
 	var header Header
 	if err := binary.Read(br, binary.LittleEndian, &header); err != nil {
 		cz.err = err
@@ -121,17 +141,15 @@ func (cz *CorruptedZip) Scan() bool {
 		return false
 	}
 	var fname string
-	if (header.Bits & (1 << 11)) == 0 {
-		// not UTF8
+	if (header.Bits & bitEncodedUTF8) != 0 {
+		fname = string(name)
+	} else {
 		var err error
 		fname, err = mbcs.AtoU(name, mbcs.ACP)
 		if err != nil {
 			cz.err = err
 			return false
 		}
-	} else {
-		// UTF8
-		fname = string(name)
 	}
 	fname = strings.TrimLeft(fname, "/")
 	cz.name = fname
@@ -156,14 +174,24 @@ func (cz *CorruptedZip) Scan() bool {
 		w = &buffer
 	}
 
-	// seek the mark
-	if err := seekToSignature(br, w); err != nil {
-		if err == io.EOF {
-			cz.br = nil
-		} else {
+	if (header.Bits & bitDataDescriptorUsed) != 0 {
+		//println("bitDataDescriptorUsed is not set")
+		if err := seekToSignature(br, w); err != nil {
+			if err == io.EOF {
+				cz.br = nil
+			} else {
+				cz.err = err
+				return false
+			}
+		}
+		cz.nextSignatureAlreadyRead = true
+	} else {
+		// println("bitDataDescriptorUsed is not set")
+		if _, err := io.CopyN(w, br, int64(header.CompressedSize)); err != nil {
 			cz.err = err
 			return false
 		}
+		cz.nextSignatureAlreadyRead = false
 	}
 	if isDir {
 		cz.body = nil
