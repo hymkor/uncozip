@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/hymkor/uncozip"
 )
@@ -62,7 +64,16 @@ func mains(args []string) error {
 	for _, fname := range args {
 		fd, err := os.Open(fname)
 		if err != nil {
-			return err
+			if !os.IsNotExist(err) {
+				return err
+			}
+			if strings.EqualFold(filepath.Ext(fname), ".zip") {
+				return err
+			}
+			fd, err = os.Open(fname + ".zip")
+			if err != nil {
+				return err
+			}
 		}
 		err = main1(fd)
 		fd.Close()
