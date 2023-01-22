@@ -1,7 +1,6 @@
 package uncozip
 
 import (
-	"io"
 	"strings"
 	"testing"
 )
@@ -9,9 +8,13 @@ import (
 func TestSeekToSignatureForLocalHeader(t *testing.T) {
 	var output strings.Builder
 	r := strings.NewReader("HOGEHOGEPK\x03\x04")
-	err := seekToSignature(r, &output)
+	cont, err := seekToSignature(r, &output)
 	if err != nil {
 		t.Fatal(err.Error())
+		return
+	}
+	if !cont {
+		t.Fatal("expect local-header,but central-header found")
 		return
 	}
 	if out := output.String(); out != "HOGEHOGE" {
@@ -23,13 +26,13 @@ func TestSeekToSignatureForLocalHeader(t *testing.T) {
 func TestSeekToSignatureForCentralDirectoryHeader(t *testing.T) {
 	var output strings.Builder
 	r := strings.NewReader("HOGEHOGEPK\x01\x02")
-	err := seekToSignature(r, &output)
-	if err == nil {
-		t.Fatal("expected io.EOF")
+	cont, err := seekToSignature(r, &output)
+	if err != nil {
+		t.Fatal(err.Error())
 		return
 	}
-	if err != io.EOF {
-		t.Fatalf("expected io.EOF but %s", err.Error())
+	if cont {
+		t.Fatal("expect central-header,but local-header found")
 		return
 	}
 	if out := output.String(); out != "HOGEHOGE" {
