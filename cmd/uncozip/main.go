@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,9 +12,56 @@ import (
 	"github.com/hymkor/uncozip"
 )
 
-var flagDebug = flag.Bool("debug", false, "Enable debug output")
+var (
+	flagDebug = flag.Bool("debug", false, "Enable debug output")
+	flagTest  = flag.Bool("t", false, "Test CRC32")
+)
 
-func main1(r io.Reader) error {
+func testCRC32FromReader(r io.Reader) error {
+	cz, err := uncozip.New(r)
+	if err != nil {
+		return err
+	}
+	if *flagDebug {
+		cz.Debug = func(args ...any) (int, error) {
+			return fmt.Fprintln(os.Stderr, args...)
+		}
+	}
+	for cz.Scan() {
+		rc := cz.Body()
+		if rc != nil {
+			h := crc32.NewIEEE()
+			_, err = io.Copy(h, rc)
+			err1 := rc.Close()
+			if err != nil {
+				return err
+			}
+			if err1 != nil {
+				return err1
+			}
+			result := h.Sum32()
+			if *flagDebug {
+				fmt.Fprintf(os.Stderr, "%s: CRC32: header=%X , body=%X\n",
+					cz.Name(), cz.Header.CRC32, result)
+			}
+			if result != cz.Header.CRC32 {
+				fmt.Fprintf(os.Stderr,
+					"NG:   %s: CRC32 is expected %X in header, but %X\n",
+					cz.Name(), cz.Header.CRC32, result)
+			} else {
+				fmt.Fprintf(os.Stderr, "OK:   %s\n", cz.Name())
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "SKIP: %s\n", cz.Name())
+		}
+	}
+	if err := cz.Err(); err != io.EOF {
+		return err
+	}
+	return nil
+}
+
+func unzipFromReader(r io.Reader) error {
 	cz, err := uncozip.New(r)
 	if err != nil {
 		return err
@@ -58,8 +106,12 @@ func main1(r io.Reader) error {
 }
 
 func mains(args []string) error {
+	f := unzipFromReader
+	if *flagTest {
+		f = testCRC32FromReader
+	}
 	if len(args) <= 0 {
-		return main1(os.Stdin)
+		return f(os.Stdin)
 	}
 	for _, fname := range args {
 		fd, err := os.Open(fname)
@@ -75,7 +127,7 @@ func mains(args []string) error {
 				return err
 			}
 		}
-		err = main1(fd)
+		err = f(fd)
 		fd.Close()
 		if err != nil {
 			return err
