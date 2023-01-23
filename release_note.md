@@ -6,6 +6,7 @@ v0.2.0
 Jan.24, 2023
 
 - Restore time-stamp
+- Check the CRC32 value on extracting also
 
 v0.1.0
 ======
