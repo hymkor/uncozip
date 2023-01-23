@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/hymkor/uncozip"
 )
@@ -114,6 +115,12 @@ func unzipFromReader(r io.Reader) error {
 				fmt.Fprintf(os.Stderr,
 					"NG:   %s: CRC32 is expected %X in header, but %X\n",
 					cz.Name(), cz.Header.CRC32, checksum)
+			}
+			hour, min, second := cz.Header.Time()
+			year, month, day := cz.Header.Date()
+			stamp := time.Date(year, time.Month(month), day, hour, min, second, 0, time.Local)
+			if err := os.Chtimes(fname, stamp, stamp); err != nil {
+				fmt.Fprintln(os.Stderr, fname, err.Error())
 			}
 		} else {
 			fmt.Fprintln(os.Stderr, "   creating:", fname)
