@@ -1,3 +1,5 @@
+github.com/hymkor/go-bitfield v0.0.0-20230123134234-0bbc071e09b8 h1:+z3PDpJB5KwWV98ferGUdGDqYkjVjTQ8EeDxOwvl0VM=
+github.com/hymkor/go-bitfield v0.0.0-20230123134234-0bbc071e09b8/go.mod h1:75H0+z7dZnlSxAeWsNicWETUalWG5SmimrMKQbxQ5vo=
 github.com/nyaosorg/go-windows-mbcs v0.0.0-20220625075624-7e48d6c9b323 h1:PeTubCi/OPZjb3aq3tIPvdaMXrkUXDLOLfXJRRDjsUc=
 github.com/nyaosorg/go-windows-mbcs v0.0.0-20220625075624-7e48d6c9b323/go.mod h1:f3y7pRJkWtCxZhCtTiTCrGkB1z4bbRKhx+z7emCkQNU=
 golang.org/x/sys v0.0.0-20220624220833-87e55d714810 h1:rHZQSjJdAI4Xf5Qzeh2bBc5YJIkPFVM6oDtMFYmgws0=

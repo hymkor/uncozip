@@ -49,7 +49,13 @@ func testCRC32FromReader(r io.Reader) error {
 					"NG:   %s: CRC32 is expected %X in header, but %X\n",
 					cz.Name(), cz.Header.CRC32, checksum)
 			} else {
-				fmt.Fprintf(os.Stderr, "OK:   %s\n", cz.Name())
+				hour, min, second := cz.Header.Time()
+				year, month, day := cz.Header.Date()
+				fmt.Fprintf(os.Stderr,
+					"%9d %04d/%02d/%02d %02d:%02d:%02d %s\n",
+					cz.Header.UncompressedSize,
+					year, month, day, hour, min,
+					second, cz.Name())
 			}
 		} else {
 			fmt.Fprintf(os.Stderr, "SKIP: %s\n", cz.Name())

@@ -10,6 +10,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/hymkor/go-bitfield"
 	"github.com/nyaosorg/go-windows-mbcs"
 )
 
@@ -35,6 +36,34 @@ type LocalFileHeader struct {
 	UncompressedSize uint32
 	FilenameLength   uint16
 	ExtendFieldSize  uint16
+}
+
+type DosTime struct {
+	Second int `bit:"5"`
+	Min    int `bit:"6"`
+	Hour   int `bit:"5"`
+}
+
+func (h *LocalFileHeader) Time() (int, int, int) {
+	var tm DosTime
+	if err := bitfield.Unpack(uint64(h.ModifiedTime), &tm); err != nil {
+		panic(err.Error())
+	}
+	return tm.Hour, tm.Min, tm.Second * 2
+}
+
+type DosDate struct {
+	Day   int `bit:"5"`
+	Month int `bit:"4"`
+	Year  int `bit:"7"`
+}
+
+func (h *LocalFileHeader) Date() (int, int, int) {
+	var dt DosDate
+	if err := bitfield.Unpack(uint64(h.ModifiedDate), &dt); err != nil {
+		panic(err.Error())
+	}
+	return 1980 + dt.Year, dt.Month, dt.Day
 }
 
 type DataDescriptor struct {
