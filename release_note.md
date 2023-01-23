@@ -1,3 +1,6 @@
+- Show version always at first.
+- Treat the parameter `-` as STDIN
+
 v0.2.0
 ======
 Jan.24, 2023
