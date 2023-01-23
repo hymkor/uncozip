@@ -97,7 +97,7 @@ func checkDataDescriptor(buffer []byte) *DataDescriptor {
 	return &desc
 }
 
-func (cz *CorruptedZip) seekToSignature(r io.ByteReader, w io.Writer) (bool, *DataDescriptor, error) {
+func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *DataDescriptor, error) {
 	const (
 		max = 100
 		min = sigSize + dataDescriptorSize + sigSize
@@ -106,8 +106,9 @@ func (cz *CorruptedZip) seekToSignature(r io.ByteReader, w io.Writer) (bool, *Da
 	buffer := make([]byte, 0, max)
 	count := 0
 	for {
-		ch, err := r.ReadByte()
+		ch, err := cz.br.ReadByte()
 		if err != nil {
+			w.Write(buffer)
 			return false, nil, err
 		}
 		buffer = append(buffer, ch)
@@ -274,7 +275,7 @@ func (cz *CorruptedZip) Scan() bool {
 
 	if (cz.Header.Bits & bitDataDescriptorUsed) != 0 {
 		cz.Debug("LocalFileHeader.Bits: bitDataDescriptorUsed is set")
-		cont, dd, err := cz.seekToSignature(br, w)
+		cont, dd, err := cz.seekToSignature(w)
 		if err != nil {
 			if err == io.EOF {
 				cz.err = ErrTooNearEOF
