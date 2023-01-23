@@ -10,7 +10,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/hymkor/go-bitfield"
 	"github.com/nyaosorg/go-windows-mbcs"
 )
 
@@ -38,32 +37,33 @@ type LocalFileHeader struct {
 	ExtendFieldSize  uint16
 }
 
-type DosTime struct {
-	Second int `bit:"5"`
-	Min    int `bit:"6"`
-	Hour   int `bit:"5"`
+const (
+	bitSecond = 5
+	bitMin    = 6
+	bitHour   = 5
+
+	bitDay   = 5
+	bitMonth = 4
+	bitYear  = 7
+)
+
+func unpackBits(source uint64, bits ...int) []int {
+	result := make([]int, len(bits))
+	for i, bit := range bits {
+		result[i] = int(source & ((1 << bit) - 1))
+		source >>= bit
+	}
+	return result
 }
 
 func (h *LocalFileHeader) Time() (int, int, int) {
-	var tm DosTime
-	if err := bitfield.Unpack(uint64(h.ModifiedTime), &tm); err != nil {
-		panic(err.Error())
-	}
-	return tm.Hour, tm.Min, tm.Second * 2
-}
-
-type DosDate struct {
-	Day   int `bit:"5"`
-	Month int `bit:"4"`
-	Year  int `bit:"7"`
+	tm := unpackBits(uint64(h.ModifiedTime), bitSecond, bitMin, bitHour)
+	return tm[2], tm[1], tm[0] * 2
 }
 
 func (h *LocalFileHeader) Date() (int, int, int) {
-	var dt DosDate
-	if err := bitfield.Unpack(uint64(h.ModifiedDate), &dt); err != nil {
-		panic(err.Error())
-	}
-	return 1980 + dt.Year, dt.Month, dt.Day
+	dt := unpackBits(uint64(h.ModifiedDate), bitDay, bitMonth, bitYear)
+	return 1980 + dt[2], dt[1], dt[0]
 }
 
 type DataDescriptor struct {
