@@ -145,23 +145,29 @@ func mains(args []string) error {
 		return f(os.Stdin)
 	}
 	for _, fname := range args {
-		fd, err := os.Open(fname)
-		if err != nil {
-			if !os.IsNotExist(err) {
+		if fname == "-" {
+			if err := f(os.Stdin); err != nil {
 				return err
 			}
-			if strings.EqualFold(filepath.Ext(fname), ".zip") {
-				return err
+		} else {
+			fd, err := os.Open(fname)
+			if err != nil {
+				if !os.IsNotExist(err) {
+					return err
+				}
+				if strings.EqualFold(filepath.Ext(fname), ".zip") {
+					return err
+				}
+				fd, err = os.Open(fname + ".zip")
+				if err != nil {
+					return err
+				}
 			}
-			fd, err = os.Open(fname + ".zip")
+			err = f(fd)
+			fd.Close()
 			if err != nil {
 				return err
 			}
-		}
-		err = f(fd)
-		fd.Close()
-		if err != nil {
-			return err
 		}
 	}
 	return nil
