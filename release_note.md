@@ -1,5 +1,6 @@
 - Show version always at first.
 - Treat the parameter `-` as STDIN
+- Add the -d option: the directory to extract
 
 v0.2.0
 ======
