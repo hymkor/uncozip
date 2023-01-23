@@ -19,6 +19,7 @@ import (
 var (
 	flagDebug = flag.Bool("debug", false, "Enable debug output")
 	flagTest  = flag.Bool("t", false, "Test CRC32")
+	flagExDir = flag.String("d", "", "the directory to extract")
 )
 
 func testCRC32FromReader(r io.Reader) error {
@@ -172,6 +173,11 @@ func mains(args []string) error {
 				}
 				fd, err = os.Open(fname + ".zip")
 				if err != nil {
+					return err
+				}
+			}
+			if *flagExDir != "" {
+				if err := os.Chdir(*flagExDir); err != nil {
 					return err
 				}
 			}
