@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/hymkor/uncozip"
 )
 
@@ -142,7 +144,17 @@ func mains(args []string) error {
 		f = testCRC32FromReader
 	}
 	if len(args) <= 0 {
-		return f(os.Stdin)
+		if term.IsTerminal(int(os.Stdin.Fd())) {
+			fmt.Fprintf(os.Stderr, "%s %s-%s-%s by %s\n",
+				filepath.Base(os.Args[0]),
+				version,
+				runtime.GOOS,
+				runtime.GOARCH,
+				runtime.Version())
+			flag.PrintDefaults()
+		} else {
+			return f(os.Stdin)
+		}
 	}
 	for _, fname := range args {
 		if fname == "-" {
@@ -176,8 +188,6 @@ func mains(args []string) error {
 var version string
 
 func main() {
-	fmt.Fprintf(os.Stderr, "%s %s-%s-%s by %s\n",
-		filepath.Base(os.Args[0]), version, runtime.GOOS, runtime.GOARCH, runtime.Version())
 	flag.Parse()
 	if err := mains(flag.Args()); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
