@@ -1,14 +1,27 @@
 package uncozip
 
 import (
+	"bytes"
+	"encoding/binary"
+	"io"
 	"strings"
 	"testing"
 )
 
 func TestSeekToSignatureForLocalHeader(t *testing.T) {
+
+	var source bytes.Buffer
+	io.WriteString(&source, "HOGEHOGE")
+	dd := &DataDescriptor{CompressedSize: 8}
+	binary.Write(&source, binary.LittleEndian, dd)
+	io.WriteString(&source, "PK\x03\x04")
+
+	cz, err := New(&source)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
 	var output strings.Builder
-	r := strings.NewReader("HOGEHOGEPK\x03\x04")
-	cont, err := seekToSignature(r, &output)
+	cont, _, err := cz.seekToSignature(&output)
 	if err != nil {
 		t.Fatal(err.Error())
 		return
@@ -24,9 +37,18 @@ func TestSeekToSignatureForLocalHeader(t *testing.T) {
 }
 
 func TestSeekToSignatureForCentralDirectoryHeader(t *testing.T) {
+	var source bytes.Buffer
+	io.WriteString(&source, "HOGEHOGE")
+	dd := &DataDescriptor{CompressedSize: 8}
+	binary.Write(&source, binary.LittleEndian, dd)
+	io.WriteString(&source, "PK\x01\x02")
+
+	cz, err := New(&source)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
 	var output strings.Builder
-	r := strings.NewReader("HOGEHOGEPK\x01\x02")
-	cont, err := seekToSignature(r, &output)
+	cont, _, err := cz.seekToSignature(&output)
 	if err != nil {
 		t.Fatal(err.Error())
 		return
