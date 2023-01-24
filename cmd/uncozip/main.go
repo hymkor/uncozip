@@ -55,23 +55,15 @@ func testCRC32FromReader(r io.Reader, patterns []string) error {
 		if !matchingPatterns(cz.Name(), patterns) {
 			// not specified
 			_, err := io.Copy(io.Discard, rc)
-			err1 := rc.Close()
 			if err != nil {
 				return err
-			}
-			if err1 != nil {
-				return err1
 			}
 			continue
 		}
 		h := crc32.NewIEEE()
 		_, err = io.Copy(h, rc)
-		err1 := rc.Close()
 		if err != nil {
 			return err
-		}
-		if err1 != nil {
-			return err1
 		}
 		checksum := h.Sum32()
 		if *flagDebug {
@@ -120,12 +112,8 @@ func unzipFromReader(r io.Reader, patterns []string) error {
 		}
 		if !matchingPatterns(fname, patterns) {
 			_, err := io.Copy(io.Discard, rc)
-			err1 := rc.Close()
 			if err != nil {
 				return err
-			}
-			if err1 != nil {
-				return err1
 			}
 			continue
 		}
@@ -137,21 +125,16 @@ func unzipFromReader(r io.Reader, patterns []string) error {
 		}
 		fd, err := os.Create(fname)
 		if err != nil {
-			rc.Close()
 			return err
 		}
 		h := crc32.NewIEEE()
 		_, err = io.Copy(fd, io.TeeReader(rc, h))
-		err1 := rc.Close()
-		err2 := fd.Close()
+		err1 := fd.Close()
 		if err != nil {
 			return err
 		}
 		if err1 != nil {
 			return err1
-		}
-		if err2 != nil {
-			return err2
 		}
 		checksum := h.Sum32()
 		if *flagDebug {

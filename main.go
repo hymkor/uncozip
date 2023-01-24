@@ -179,7 +179,7 @@ func (cz *CorruptedZip) Err() error {
 	return cz.err
 }
 
-func (cz *CorruptedZip) Body() io.ReadCloser {
+func (cz *CorruptedZip) Body() io.Reader {
 	return cz.body
 }
 
@@ -191,6 +191,10 @@ func New(r io.Reader) (*CorruptedZip, error) {
 }
 
 func (cz *CorruptedZip) Scan() bool {
+	if cz.body != nil {
+		cz.body.Close()
+		cz.body = nil
+	}
 	br := cz.br
 	if br == nil {
 		cz.err = io.EOF
@@ -304,7 +308,6 @@ func (cz *CorruptedZip) Scan() bool {
 		cz.nextSignatureAlreadyRead = false
 	}
 	if isDir {
-		cz.body = nil
 		return true
 	}
 	switch cz.Header.Method {
@@ -315,7 +318,6 @@ func (cz *CorruptedZip) Scan() bool {
 		cz.body = io.NopCloser(&buffer)
 		return true
 	default:
-		cz.body = nil
 		cz.err = fmt.Errorf("Compression Method(%d) is not supported", cz.Header.Method)
 		return false
 	}
