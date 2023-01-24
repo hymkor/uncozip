@@ -22,7 +22,20 @@ var (
 	flagExDir = flag.String("d", "", "the directory to extract")
 )
 
-func testCRC32FromReader(r io.Reader) error {
+func matchingPatterns(target string, patterns []string) bool {
+	if patterns == nil || len(patterns) <= 0 {
+		return true
+	}
+	for _, p := range patterns {
+		matched, err := filepath.Match(p, target)
+		if err == nil && matched {
+			return true
+		}
+	}
+	return false
+}
+
+func testCRC32FromReader(r io.Reader, patterns []string) error {
 	cz, err := uncozip.New(r)
 	if err != nil {
 		return err
@@ -34,9 +47,14 @@ func testCRC32FromReader(r io.Reader) error {
 	}
 	for cz.Scan() {
 		rc := cz.Body()
-		if rc != nil {
-			h := crc32.NewIEEE()
-			_, err = io.Copy(h, rc)
+		if rc == nil {
+			// directory
+			fmt.Fprintf(os.Stderr, "SKIP: %s\n", cz.Name())
+			continue
+		}
+		if !matchingPatterns(cz.Name(), patterns) {
+			// not specified
+			_, err := io.Copy(io.Discard, rc)
 			err1 := rc.Close()
 			if err != nil {
 				return err
@@ -44,26 +62,34 @@ func testCRC32FromReader(r io.Reader) error {
 			if err1 != nil {
 				return err1
 			}
-			checksum := h.Sum32()
-			if *flagDebug {
-				fmt.Fprintf(os.Stderr, "%s: CRC32: header=%X , body=%X\n",
-					cz.Name(), cz.Header.CRC32, checksum)
-			}
-			if checksum != cz.Header.CRC32 {
-				fmt.Fprintf(os.Stderr,
-					"NG:   %s: CRC32 is expected %X in header, but %X\n",
-					cz.Name(), cz.Header.CRC32, checksum)
-			} else {
-				hour, min, second := cz.Header.Time()
-				year, month, day := cz.Header.Date()
-				fmt.Fprintf(os.Stderr,
-					"%9d %04d/%02d/%02d %02d:%02d:%02d %s\n",
-					cz.Header.UncompressedSize,
-					year, month, day, hour, min,
-					second, cz.Name())
-			}
+			continue
+		}
+		h := crc32.NewIEEE()
+		_, err = io.Copy(h, rc)
+		err1 := rc.Close()
+		if err != nil {
+			return err
+		}
+		if err1 != nil {
+			return err1
+		}
+		checksum := h.Sum32()
+		if *flagDebug {
+			fmt.Fprintf(os.Stderr, "%s: CRC32: header=%X , body=%X\n",
+				cz.Name(), cz.Header.CRC32, checksum)
+		}
+		if checksum != cz.Header.CRC32 {
+			fmt.Fprintf(os.Stderr,
+				"NG:   %s: CRC32 is expected %X in header, but %X\n",
+				cz.Name(), cz.Header.CRC32, checksum)
 		} else {
-			fmt.Fprintf(os.Stderr, "SKIP: %s\n", cz.Name())
+			hour, min, second := cz.Header.Time()
+			year, month, day := cz.Header.Date()
+			fmt.Fprintf(os.Stderr,
+				"%9d %04d/%02d/%02d %02d:%02d:%02d %s\n",
+				cz.Header.UncompressedSize,
+				year, month, day, hour, min,
+				second, cz.Name())
 		}
 	}
 	if err := cz.Err(); err != io.EOF {
@@ -72,7 +98,7 @@ func testCRC32FromReader(r io.Reader) error {
 	return nil
 }
 
-func unzipFromReader(r io.Reader) error {
+func unzipFromReader(r io.Reader, patterns []string) error {
 	cz, err := uncozip.New(r)
 	if err != nil {
 		return err
@@ -85,52 +111,63 @@ func unzipFromReader(r io.Reader) error {
 	for cz.Scan() {
 		fname := cz.Name()
 		rc := cz.Body()
-		if rc != nil {
-			switch cz.Header.Method {
-			case uncozip.Deflated:
-				fmt.Fprintln(os.Stderr, "  inflating:", fname)
-			case uncozip.NotCompressed:
-				fmt.Fprintln(os.Stderr, " extracting:", fname)
-			}
-			fd, err := os.Create(fname)
-			if err != nil {
-				rc.Close()
+		if rc == nil {
+			fmt.Fprintln(os.Stderr, "   creating:", fname)
+			if err := os.Mkdir(fname, 0644); err != nil && !os.IsExist(err) {
 				return err
 			}
-			h := crc32.NewIEEE()
-			_, err = io.Copy(fd, io.TeeReader(rc, h))
+			continue
+		}
+		if !matchingPatterns(fname, patterns) {
+			_, err := io.Copy(io.Discard, rc)
 			err1 := rc.Close()
-			err2 := fd.Close()
 			if err != nil {
 				return err
 			}
 			if err1 != nil {
 				return err1
 			}
-			if err2 != nil {
-				return err2
-			}
-			checksum := h.Sum32()
-			if *flagDebug {
-				fmt.Fprintf(os.Stderr, "%s: CRC32: header=%X , body=%X\n",
-					cz.Name(), cz.Header.CRC32, checksum)
-			}
-			if checksum != cz.Header.CRC32 {
-				fmt.Fprintf(os.Stderr,
-					"NG:   %s: CRC32 is expected %X in header, but %X\n",
-					cz.Name(), cz.Header.CRC32, checksum)
-			}
-			hour, min, second := cz.Header.Time()
-			year, month, day := cz.Header.Date()
-			stamp := time.Date(year, time.Month(month), day, hour, min, second, 0, time.Local)
-			if err := os.Chtimes(fname, stamp, stamp); err != nil {
-				fmt.Fprintln(os.Stderr, fname, err.Error())
-			}
-		} else {
-			fmt.Fprintln(os.Stderr, "   creating:", fname)
-			if err := os.Mkdir(fname, 0644); err != nil && !os.IsExist(err) {
-				return err
-			}
+			continue
+		}
+		switch cz.Header.Method {
+		case uncozip.Deflated:
+			fmt.Fprintln(os.Stderr, "  inflating:", fname)
+		case uncozip.NotCompressed:
+			fmt.Fprintln(os.Stderr, " extracting:", fname)
+		}
+		fd, err := os.Create(fname)
+		if err != nil {
+			rc.Close()
+			return err
+		}
+		h := crc32.NewIEEE()
+		_, err = io.Copy(fd, io.TeeReader(rc, h))
+		err1 := rc.Close()
+		err2 := fd.Close()
+		if err != nil {
+			return err
+		}
+		if err1 != nil {
+			return err1
+		}
+		if err2 != nil {
+			return err2
+		}
+		checksum := h.Sum32()
+		if *flagDebug {
+			fmt.Fprintf(os.Stderr, "%s: CRC32: header=%X , body=%X\n",
+				cz.Name(), cz.Header.CRC32, checksum)
+		}
+		if checksum != cz.Header.CRC32 {
+			fmt.Fprintf(os.Stderr,
+				"NG:   %s: CRC32 is expected %X in header, but %X\n",
+				cz.Name(), cz.Header.CRC32, checksum)
+		}
+		hour, min, second := cz.Header.Time()
+		year, month, day := cz.Header.Date()
+		stamp := time.Date(year, time.Month(month), day, hour, min, second, 0, time.Local)
+		if err := os.Chtimes(fname, stamp, stamp); err != nil {
+			fmt.Fprintln(os.Stderr, fname, err.Error())
 		}
 	}
 	if err := cz.Err(); err != io.EOF {
@@ -153,42 +190,40 @@ func mains(args []string) error {
 				runtime.GOARCH,
 				runtime.Version())
 			flag.PrintDefaults()
+			return nil
 		} else {
-			return f(os.Stdin)
+			return f(os.Stdin, args)
 		}
 	}
-	for _, fname := range args {
-		if fname == "-" {
-			if err := f(os.Stdin); err != nil {
-				return err
-			}
-		} else {
-			fd, err := os.Open(fname)
-			if err != nil {
-				if !os.IsNotExist(err) {
-					return err
-				}
-				if strings.EqualFold(filepath.Ext(fname), ".zip") {
-					return err
-				}
-				fd, err = os.Open(fname + ".zip")
-				if err != nil {
-					return err
-				}
-			}
-			if *flagExDir != "" {
-				if err := os.Chdir(*flagExDir); err != nil {
-					return err
-				}
-			}
-			err = f(fd)
-			fd.Close()
-			if err != nil {
-				return err
-			}
+	fname := args[0]
+	args = args[1:]
+	if fname == "-" {
+		return f(os.Stdin, args)
+	}
+	fd, err := os.Open(fname)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		if strings.EqualFold(filepath.Ext(fname), ".zip") {
+			return err
+		}
+		fd, err = os.Open(fname + ".zip")
+		if err != nil {
+			return err
 		}
 	}
-	return nil
+	if *flagExDir != "" {
+		if err := os.Chdir(*flagExDir); err != nil {
+			return err
+		}
+	}
+	err = f(fd, args)
+	err1 := fd.Close()
+	if err != nil {
+		return err
+	}
+	return err1
 }
 
 var version string
