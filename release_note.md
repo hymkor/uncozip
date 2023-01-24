@@ -1,14 +1,17 @@
+v0.3.0
+======
+Jan.24, 2023
+
 - Show version and usage when no arguments are given and STDIN is tty
 - Treat the parameter `-` as STDIN
 - Add the -d option: the directory where to extract
 - The pattern of filename that zip contains can now be specified
-- The timestamps are now restored
 
 v0.2.0
 ======
 Jan.24, 2023
 
-- Restore time-stamp
+- The timestamps are now restored
 - Check the CRC32 value on extracting also
 
 v0.1.0
