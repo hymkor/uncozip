@@ -19,7 +19,7 @@ import (
 var (
 	flagDebug = flag.Bool("debug", false, "Enable debug output")
 	flagTest  = flag.Bool("t", false, "Test CRC32")
-	flagExDir = flag.String("d", "", "the directory to extract")
+	flagExDir = flag.String("d", "", "the directory where to extract")
 )
 
 func matchingPatterns(target string, patterns []string) bool {
