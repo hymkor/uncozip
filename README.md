@@ -10,13 +10,14 @@ Usage
 ----------
 
 ```
-uncozip [-debug] [-t] {ZIPFILENAME | -}
+uncozip {OPTIONS} ZIPFILENAME [list...]
+
+uncozip {OPTIONS} - [list...] < ZIPFILENAME
+
+uncozip {OPTIONS} < ZIPFILENAME
 ```
 
-```
-uncozip [-debug] [-t] [-] < ZIPFILENAME
-```
-
+* `-d string` the directory where to extract
 * `-debug` Enable debug output
 * `-t` Test CRC32 only
 
