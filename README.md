@@ -1,3 +1,5 @@
+[![GoDev](https://pkg.go.dev/badge/github.com/hymkor/uncozip)](https://pkg.go.dev/github.com/hymkor/uncozip)
+
 uncozip
 =======
 
