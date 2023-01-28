@@ -56,11 +56,13 @@ func unpackBits(source uint64, bits ...int) []int {
 	return result
 }
 
+// Time returns Hour, Minute, and Second of Modificated time.
 func (h *LocalFileHeader) Time() (int, int, int) {
 	tm := unpackBits(uint64(h.ModifiedTime), bitSecond, bitMin, bitHour)
 	return tm[2], tm[1], tm[0] * 2
 }
 
+// Date returns Year, Month, and Day of Modified date.
 func (h *LocalFileHeader) Date() (int, int, int) {
 	dt := unpackBits(uint64(h.ModifiedDate), bitDay, bitMonth, bitYear)
 	return 1980 + dt[2], dt[1], dt[0]
@@ -171,18 +173,22 @@ type CorruptedZip struct {
 	Header LocalFileHeader
 }
 
+// Name returns the name of the most recent file by a call to Scan.
 func (cz *CorruptedZip) Name() string {
 	return cz.name
 }
 
+// Err returns the error encountered by the CorruptedZip.
 func (cz *CorruptedZip) Err() error {
 	return cz.err
 }
 
+// Body returns the reader of the most recent file by a call to Scan.
 func (cz *CorruptedZip) Body() io.Reader {
 	return cz.body
 }
 
+// New returns a CorruptedZip instance that reads a ZIP archive.
 func New(r io.Reader) (*CorruptedZip, error) {
 	return &CorruptedZip{
 		br:    bufio.NewReader(r),
@@ -190,6 +196,7 @@ func New(r io.Reader) (*CorruptedZip, error) {
 	}, nil
 }
 
+// Scan advances the CorruptedZip to the next single file in a ZIP archive.
 func (cz *CorruptedZip) Scan() bool {
 	if cz.body != nil {
 		cz.body.Close()
