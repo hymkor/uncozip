@@ -73,10 +73,10 @@ type DataDescriptor struct {
 }
 
 var (
-	_LocalFileHeaderSignature    = []byte{'P', 'K', 3, 4}
-	_CentralDirectoryHeader      = []byte{'P', 'K', 1, 2}
-	_EndOfCentralDirectoryRecord = []byte{'P', 'K', 5, 6} // not used.
-	_DataDescriptor              = []byte{'P', 'K', 7, 8} // not used.
+	sigLocalFileHeader             = []byte{'P', 'K', 3, 4}
+	sigCentralDirectoryHeader      = []byte{'P', 'K', 1, 2}
+	sigEndOfCentralDirectoryRecord = []byte{'P', 'K', 5, 6} // not used.
+	sigDataDescriptor              = []byte{'P', 'K', 7, 8}
 )
 
 var (
@@ -115,8 +115,8 @@ func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *DataDescriptor, err
 		count++
 
 		switch ch {
-		case _LocalFileHeaderSignature[sigSize-1]:
-			if bytes.HasSuffix(buffer, _LocalFileHeaderSignature) {
+		case sigLocalFileHeader[sigSize-1]:
+			if bytes.HasSuffix(buffer, sigLocalFileHeader) {
 				dd := checkDataDescriptor(buffer)
 				if dd != nil {
 					size := int(dd.CompressedSize)
@@ -126,15 +126,15 @@ func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *DataDescriptor, err
 						return true, dd, nil
 					}
 					if size == count-sigSize-dataDescriptorSize-sigSize &&
-						bytes.HasSuffix(buffer[:len(buffer)-sigSize-dataDescriptorSize], _DataDescriptor) {
+						bytes.HasSuffix(buffer[:len(buffer)-sigSize-dataDescriptorSize], sigDataDescriptor) {
 						w.Write(buffer[:len(buffer)-sigSize-dataDescriptorSize-sigSize])
 						cz.Debug("Found DataDescriptor with signature")
 						return true, dd, nil
 					}
 				}
 			}
-		case _CentralDirectoryHeader[sigSize-1]:
-			if bytes.HasSuffix(buffer, _CentralDirectoryHeader) {
+		case sigCentralDirectoryHeader[sigSize-1]:
+			if bytes.HasSuffix(buffer, sigCentralDirectoryHeader) {
 				dd := checkDataDescriptor(buffer)
 				if dd != nil {
 					size := int(dd.CompressedSize)
@@ -144,7 +144,7 @@ func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *DataDescriptor, err
 						return false, dd, nil
 					}
 					if size == count-sigSize-dataDescriptorSize-sigSize &&
-						bytes.HasSuffix(buffer[:len(buffer)-sigSize-dataDescriptorSize], _DataDescriptor) {
+						bytes.HasSuffix(buffer[:len(buffer)-sigSize-dataDescriptorSize], sigDataDescriptor) {
 						w.Write(buffer[:len(buffer)-sigSize-dataDescriptorSize-sigSize])
 						cz.Debug("Found DetaDescripture with signature")
 						return false, dd, nil
@@ -212,11 +212,11 @@ func (cz *CorruptedZip) Scan() bool {
 			}
 			return false
 		}
-		if bytes.Equal(signature[:], _CentralDirectoryHeader) {
+		if bytes.Equal(signature[:], sigCentralDirectoryHeader) {
 			cz.err = io.EOF
 			return false
 		}
-		if !bytes.Equal(signature[:], _LocalFileHeaderSignature) {
+		if !bytes.Equal(signature[:], sigLocalFileHeader) {
 			cz.err = ErrLocalFileHeaderSignatureNotFound
 			return false
 		}
