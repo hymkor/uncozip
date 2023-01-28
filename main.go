@@ -66,7 +66,7 @@ func (h *LocalFileHeader) Date() (int, int, int) {
 	return 1980 + dt[2], dt[1], dt[0]
 }
 
-type DataDescriptor struct {
+type _DataDescriptor struct {
 	CRC32            uint32
 	CompressedSize   uint32
 	UncompressedSize uint32
@@ -84,8 +84,8 @@ var (
 	ErrLocalFileHeaderSignatureNotFound = errors.New("Signature not found")
 )
 
-func checkDataDescriptor(buffer []byte) *DataDescriptor {
-	var desc DataDescriptor
+func checkDataDescriptor(buffer []byte) *_DataDescriptor {
+	var desc _DataDescriptor
 	start := len(buffer) - sigSize - dataDescriptorSize
 	if start < 0 {
 		return nil
@@ -97,7 +97,7 @@ func checkDataDescriptor(buffer []byte) *DataDescriptor {
 	return &desc
 }
 
-func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *DataDescriptor, error) {
+func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *_DataDescriptor, error) {
 	const (
 		max = 100
 		min = sigSize + dataDescriptorSize + sigSize
