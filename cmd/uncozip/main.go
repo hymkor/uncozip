@@ -13,6 +13,8 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/mattn/go-tty"
+
 	"github.com/hymkor/uncozip"
 )
 
@@ -90,11 +92,33 @@ func testCRC32FromReader(r io.Reader, patterns []string) error {
 	return nil
 }
 
+type PasswordReader struct {
+	value []byte
+}
+
+func (p *PasswordReader) Ask(retry bool) ([]byte, error) {
+	if retry || p.value == nil {
+		tty, err := tty.Open()
+		if err != nil {
+			return nil, err
+		}
+		defer tty.Close()
+		fmt.Fprint(os.Stderr, "password: ")
+		passwordString, err := tty.ReadPassword()
+		if err != nil {
+			return nil, err
+		}
+		p.value = []byte(passwordString)
+	}
+	return p.value, nil
+}
+
 func unzipFromReader(r io.Reader, patterns []string) error {
 	cz, err := uncozip.New(r)
 	if err != nil {
 		return err
 	}
+	cz.PasswordReader = &PasswordReader{}
 	if *flagDebug {
 		cz.Debug = func(args ...any) (int, error) {
 			return fmt.Fprintln(os.Stderr, args...)

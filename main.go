@@ -10,6 +10,8 @@ import (
 	"io"
 	"strings"
 
+	"golang.org/x/text/transform"
+
 	"github.com/nyaosorg/go-windows-mbcs"
 )
 
@@ -17,6 +19,7 @@ const (
 	NotCompressed = 0
 	Deflated      = 8
 
+	bitEncrypted          = 1 << 0
 	bitDataDescriptorUsed = 1 << 3
 	bitEncodedUTF8        = 1 << 11
 
@@ -25,11 +28,11 @@ const (
 )
 
 type LocalFileHeader struct {
-	RequiredVersion  int16
-	Bits             int16
-	Method           int16
-	ModifiedTime     int16
-	ModifiedDate     int16
+	RequiredVersion  uint16
+	Bits             uint16
+	Method           uint16
+	ModifiedTime     uint16
+	ModifiedDate     uint16
 	CRC32            uint32
 	CompressedSize   uint32
 	UncompressedSize uint32
@@ -169,8 +172,9 @@ type CorruptedZip struct {
 	err                      error
 	nextSignatureAlreadyRead bool
 
-	Debug  func(...any) (int, error)
-	Header LocalFileHeader
+	Debug          func(...any) (int, error)
+	Header         LocalFileHeader
+	PasswordReader PasswordReader
 }
 
 // Name returns the name of the most recent file by a call to Scan.
@@ -317,12 +321,22 @@ func (cz *CorruptedZip) Scan() bool {
 	if isDir {
 		return true
 	}
+	var b io.Reader = &buffer
+	if (cz.Header.Bits & bitEncrypted) != 0 {
+		// Use cz.Header.ModifiedTime instead of CRC32.
+		// The reason is unknown.
+		if cz.PasswordReader == nil {
+			cz.err = PasswordError
+			return false
+		}
+		b = transform.NewReader(b, newDecrypter(cz.PasswordReader, cz.Header.ModifiedTime))
+	}
 	switch cz.Header.Method {
 	case Deflated:
-		cz.body = flate.NewReader(&buffer)
+		cz.body = flate.NewReader(b)
 		return true
 	case NotCompressed:
-		cz.body = io.NopCloser(&buffer)
+		cz.body = io.NopCloser(b)
 		return true
 	default:
 		cz.err = fmt.Errorf("Compression Method(%d) is not supported", cz.Header.Method)
