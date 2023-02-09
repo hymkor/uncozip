@@ -165,6 +165,26 @@ func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *_DataDescriptor, er
 	}
 }
 
+type PasswordHolder struct {
+	getter   func() ([]byte, error)
+	lastword []byte
+}
+
+func (p *PasswordHolder) Ready() bool {
+	return p.getter != nil
+}
+
+func (p *PasswordHolder) Ask(retry bool) ([]byte, error) {
+	if retry || p.lastword == nil {
+		value, err := p.getter()
+		if err != nil {
+			return nil, err
+		}
+		p.lastword = value
+	}
+	return p.lastword, nil
+}
+
 type CorruptedZip struct {
 	br                       *bufio.Reader
 	name                     string
@@ -174,7 +194,11 @@ type CorruptedZip struct {
 
 	Debug          func(...any) (int, error)
 	Header         LocalFileHeader
-	PasswordGetter PasswordGetter
+	passwordHolder PasswordHolder
+}
+
+func (cz *CorruptedZip) SetPasswordGetter(f func() ([]byte, error)) {
+	cz.passwordHolder.getter = f
 }
 
 // Name returns the name of the most recent file by a call to Scan.
@@ -323,13 +347,13 @@ func (cz *CorruptedZip) Scan() bool {
 	}
 	var b io.Reader = &buffer
 	if (cz.Header.Bits & bitEncrypted) != 0 {
-		// Use cz.Header.ModifiedTime instead of CRC32.
-		// The reason is unknown.
-		if cz.PasswordGetter == nil {
+		if !cz.passwordHolder.Ready() {
 			cz.err = PasswordError
 			return false
 		}
-		b = transform.NewReader(b, newDecrypter(cz.PasswordGetter, cz.Header.ModifiedTime))
+		// Use cz.Header.ModifiedTime instead of CRC32.
+		// The reason is unknown.
+		b = transform.NewReader(b, newDecrypter(&cz.passwordHolder, cz.Header.ModifiedTime))
 	}
 	switch cz.Header.Method {
 	case Deflated:

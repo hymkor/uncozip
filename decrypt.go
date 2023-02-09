@@ -12,19 +12,15 @@ import (
 
 // var _ transform.Transformer = &decrypter{}
 
-type PasswordGetter interface {
-	Ask(retry bool) ([]byte, error)
-}
-
 type decrypter struct {
 	check     uint16
-	pwdReader PasswordGetter
+	pwdHolder *PasswordHolder
 	key       [3]uint32
 	first     bool
 }
 
-func newDecrypter(passwordReader PasswordGetter, check uint16) *decrypter {
-	this := &decrypter{check: check, pwdReader: passwordReader}
+func newDecrypter(pwdHolder *PasswordHolder, check uint16) *decrypter {
+	this := &decrypter{check: check, pwdHolder: pwdHolder}
 	this.Reset()
 	return this
 }
@@ -66,7 +62,7 @@ func (d *decrypter) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err 
 			if i >= 3 {
 				return 0, 0, PasswordError
 			}
-			pwd, err := d.pwdReader.Ask(i > 0)
+			pwd, err := d.pwdHolder.Ask(i > 0)
 			if err != nil {
 				return 0, 0, err
 			}
