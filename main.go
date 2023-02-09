@@ -348,7 +348,7 @@ func (cz *CorruptedZip) Scan() bool {
 	var b io.Reader = &buffer
 	if (cz.Header.Bits & bitEncrypted) != 0 {
 		if !cz.passwordHolder.Ready() {
-			cz.err = PasswordError
+			cz.err = &ErrPassword{name: fname}
 			return false
 		}
 		// Use cz.Header.ModifiedTime instead of CRC32.

@@ -1,7 +1,6 @@
 package uncozip
 
 import (
-	"errors"
 	"hash/crc32"
 
 	"golang.org/x/text/transform"
@@ -51,7 +50,17 @@ func (d *decrypter) decrypt(b byte) byte {
 	return tmp
 }
 
-var PasswordError = errors.New("password error")
+type ErrPassword struct {
+	name string
+}
+
+func (e *ErrPassword) Error() string {
+	return "Password error"
+}
+
+func (e *ErrPassword) Name() string {
+	return e.name
+}
 
 func (d *decrypter) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err error) {
 	if d.first {
@@ -61,7 +70,7 @@ func (d *decrypter) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err 
 		}
 		for i := 0; ; i++ {
 			if i >= 3 {
-				return 0, 0, PasswordError
+				return 0, 0, &ErrPassword{name: d.name}
 			}
 			pwd, err := d.pwdHolder.Ask(d.name, i > 0)
 			if err != nil {
