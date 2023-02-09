@@ -286,6 +286,8 @@ func (cz *CorruptedZip) Scan() bool {
 			return false
 		}
 	}
+	cz.Debug("LocalFileHeader Name:", fname)
+
 	fname = strings.TrimLeft(fname, "/")
 	cz.name = fname
 
@@ -301,7 +303,8 @@ func (cz *CorruptedZip) Scan() bool {
 			return false
 		}
 	}
-	cz.Debug("LocalFileHeader.Compress Data:", cz.Header.CompressedSize)
+	cz.Debug("LocalFileHeader.CompressSize:", cz.Header.CompressedSize)
+	cz.Debug("LocalFileHeader.UncompressedSize:", cz.Header.UncompressedSize)
 	var buffer bytes.Buffer
 	var w io.Writer
 
