@@ -1,3 +1,6 @@
+- Support ZIP64
+- Support encrypted zip
+
 v0.3.0
 ======
 Jan.24, 2023
