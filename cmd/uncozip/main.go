@@ -96,7 +96,7 @@ func testCRC32FromReader(r io.Reader, patterns []string) error {
 			year, month, day := cz.Header.Date()
 			fmt.Fprintf(os.Stderr,
 				"%9d %04d/%02d/%02d %02d:%02d:%02d %s\n",
-				cz.Header.UncompressedSize,
+				cz.OriginalSize(),
 				year, month, day, hour, min,
 				second, cz.Name())
 		}

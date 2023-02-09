@@ -192,9 +192,26 @@ type CorruptedZip struct {
 	err                      error
 	nextSignatureAlreadyRead bool
 
+	originalSize64   uint64
+	compressedSize64 uint64
+
 	Debug          func(...any) (int, error)
 	Header         LocalFileHeader
 	passwordHolder _PasswordHolder
+}
+
+func (cz *CorruptedZip) OriginalSize() uint64 {
+	if cz.originalSize64 > uint64(cz.Header.UncompressedSize) {
+		return cz.originalSize64
+	}
+	return uint64(cz.Header.UncompressedSize)
+}
+
+func (cz *CorruptedZip) CompressedSize() uint64 {
+	if cz.compressedSize64 > uint64(cz.Header.CompressedSize) {
+		return cz.compressedSize64
+	}
+	return uint64(cz.Header.CompressedSize)
 }
 
 func (cz *CorruptedZip) SetPasswordGetter(f func(name string) ([]byte, error)) {
@@ -292,15 +309,64 @@ func (cz *CorruptedZip) Scan() bool {
 	cz.name = fname
 
 	// skip ExtendField
-	cz.Debug("LocalFileHeader.ExtendField:", cz.Header.ExtendFieldSize)
+	cz.Debug("LocalFileHeader.ExtendFieldSize:", cz.Header.ExtendFieldSize)
 	if cz.Header.ExtendFieldSize > 0 {
-		if _, err := br.Discard(int(cz.Header.ExtendFieldSize)); err != nil {
-			if err == io.EOF {
-				cz.err = ErrTooNearEOF
-			} else {
-				cz.err = err
+		var header struct {
+			ID   uint16
+			Size uint16
+		}
+
+		left := cz.Header.ExtendFieldSize
+		for left >= 4 {
+			err := binary.Read(br, binary.LittleEndian, &header)
+			if err != nil {
+				cz.err = fmt.Errorf("ExtendField Error: %w", err)
+				return false
 			}
-			return false
+			cz.Debug("ExtendField: ID:", header.ID, "Size:", header.Size)
+			left -= 4 + header.Size
+			if header.ID == 0x0001 && header.Size >= 8 {
+				leftSize := header.Size
+				err = binary.Read(br, binary.LittleEndian, &cz.originalSize64)
+				if err != nil {
+					cz.err = fmt.Errorf("ZIP64 Header: originalSize field broken: %w", err)
+					return false
+				}
+				cz.Debug("ExtendField: ZIP64.OriginalSize:", cz.originalSize64)
+				leftSize -= 8
+				if leftSize >= 8 {
+					err = binary.Read(br, binary.LittleEndian, &cz.compressedSize64)
+					if err != nil {
+						cz.err = fmt.Errorf("ZIP64 Header: compressSize field broken: %w", err)
+						return false
+					}
+					leftSize -= 8
+					cz.Debug("ExtendField: ZIP64.CompressSize:", cz.compressedSize64)
+				}
+				if leftSize > 0 {
+					if _, err = br.Discard(int(leftSize)); err != nil {
+						cz.err = fmt.Errorf("ZIP64 Header: left field broen: %w", err)
+						return false
+					}
+				}
+			} else {
+				if header.Size > 0 {
+					if _, err = br.Discard(int(header.Size)); err != nil {
+						cz.err = err
+						return false
+					}
+				}
+			}
+		}
+		if left > 0 {
+			if _, err := br.Discard(int(left)); err != nil {
+				if err == io.EOF {
+					cz.err = ErrTooNearEOF
+				} else {
+					cz.err = err
+				}
+				return false
+			}
 		}
 	}
 	cz.Debug("LocalFileHeader.CompressSize:", cz.Header.CompressedSize)
@@ -335,7 +401,7 @@ func (cz *CorruptedZip) Scan() bool {
 		cz.nextSignatureAlreadyRead = true
 	} else {
 		cz.Debug("LocalFileHeader.Bits: bitDataDescriptorUsed is not set")
-		if _, err := io.CopyN(w, br, int64(cz.Header.CompressedSize)); err != nil {
+		if _, err := io.CopyN(w, br, int64(cz.CompressedSize())); err != nil {
 			if err == io.EOF {
 				cz.err = ErrTooNearEOF
 			} else {
