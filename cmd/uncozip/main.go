@@ -42,7 +42,7 @@ func testCRC32FromReader(r io.Reader, patterns []string) error {
 	if err != nil {
 		return err
 	}
-	cz.PasswordReader = &PasswordReader{}
+	cz.PasswordGetter = &PasswordGetter{}
 	if *flagDebug {
 		cz.Debug = func(args ...any) (int, error) {
 			return fmt.Fprintln(os.Stderr, args...)
@@ -93,11 +93,11 @@ func testCRC32FromReader(r io.Reader, patterns []string) error {
 	return nil
 }
 
-type PasswordReader struct {
+type PasswordGetter struct {
 	value []byte
 }
 
-func (p *PasswordReader) Ask(retry bool) ([]byte, error) {
+func (p *PasswordGetter) Ask(retry bool) ([]byte, error) {
 	if retry || p.value == nil {
 		tty, err := tty.Open()
 		if err != nil {
@@ -119,7 +119,7 @@ func unzipFromReader(r io.Reader, patterns []string) error {
 	if err != nil {
 		return err
 	}
-	cz.PasswordReader = &PasswordReader{}
+	cz.PasswordGetter = &PasswordGetter{}
 	if *flagDebug {
 		cz.Debug = func(args ...any) (int, error) {
 			return fmt.Fprintln(os.Stderr, args...)

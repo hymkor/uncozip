@@ -174,7 +174,7 @@ type CorruptedZip struct {
 
 	Debug          func(...any) (int, error)
 	Header         LocalFileHeader
-	PasswordReader PasswordReader
+	PasswordGetter PasswordGetter
 }
 
 // Name returns the name of the most recent file by a call to Scan.
@@ -325,11 +325,11 @@ func (cz *CorruptedZip) Scan() bool {
 	if (cz.Header.Bits & bitEncrypted) != 0 {
 		// Use cz.Header.ModifiedTime instead of CRC32.
 		// The reason is unknown.
-		if cz.PasswordReader == nil {
+		if cz.PasswordGetter == nil {
 			cz.err = PasswordError
 			return false
 		}
-		b = transform.NewReader(b, newDecrypter(cz.PasswordReader, cz.Header.ModifiedTime))
+		b = transform.NewReader(b, newDecrypter(cz.PasswordGetter, cz.Header.ModifiedTime))
 	}
 	switch cz.Header.Method {
 	case Deflated:

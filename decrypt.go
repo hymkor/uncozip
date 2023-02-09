@@ -12,18 +12,18 @@ import (
 
 // var _ transform.Transformer = &decrypter{}
 
-type PasswordReader interface {
+type PasswordGetter interface {
 	Ask(retry bool) ([]byte, error)
 }
 
 type decrypter struct {
 	check     uint16
-	pwdReader PasswordReader
+	pwdReader PasswordGetter
 	key       [3]uint32
 	first     bool
 }
 
-func newDecrypter(passwordReader PasswordReader, check uint16) *decrypter {
+func newDecrypter(passwordReader PasswordGetter, check uint16) *decrypter {
 	this := &decrypter{check: check, pwdReader: passwordReader}
 	this.Reset()
 	return this
