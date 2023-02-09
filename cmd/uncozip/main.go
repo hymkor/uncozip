@@ -42,6 +42,7 @@ func testCRC32FromReader(r io.Reader, patterns []string) error {
 	if err != nil {
 		return err
 	}
+	cz.PasswordReader = &PasswordReader{}
 	if *flagDebug {
 		cz.Debug = func(args ...any) (int, error) {
 			return fmt.Fprintln(os.Stderr, args...)
