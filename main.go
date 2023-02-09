@@ -165,16 +165,16 @@ func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *_DataDescriptor, er
 	}
 }
 
-type PasswordHolder struct {
+type _PasswordHolder struct {
 	getter   func(name string) ([]byte, error)
 	lastword []byte
 }
 
-func (p *PasswordHolder) Ready() bool {
+func (p *_PasswordHolder) Ready() bool {
 	return p.getter != nil
 }
 
-func (p *PasswordHolder) Ask(name string, retry bool) ([]byte, error) {
+func (p *_PasswordHolder) Ask(name string, retry bool) ([]byte, error) {
 	if retry || p.lastword == nil {
 		value, err := p.getter(name)
 		if err != nil {
@@ -194,7 +194,7 @@ type CorruptedZip struct {
 
 	Debug          func(...any) (int, error)
 	Header         LocalFileHeader
-	passwordHolder PasswordHolder
+	passwordHolder _PasswordHolder
 }
 
 func (cz *CorruptedZip) SetPasswordGetter(f func(name string) ([]byte, error)) {

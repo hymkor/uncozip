@@ -15,12 +15,12 @@ import (
 type decrypter struct {
 	name      string // for error message
 	check     uint16
-	pwdHolder *PasswordHolder
+	pwdHolder *_PasswordHolder
 	key       [3]uint32
 	first     bool
 }
 
-func newDecrypter(name string, pwdHolder *PasswordHolder, check uint16) *decrypter {
+func newDecrypter(name string, pwdHolder *_PasswordHolder, check uint16) *decrypter {
 	this := &decrypter{name: name, check: check, pwdHolder: pwdHolder}
 	this.Reset()
 	return this
