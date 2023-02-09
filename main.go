@@ -166,7 +166,7 @@ func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *_DataDescriptor, er
 }
 
 type PasswordHolder struct {
-	getter   func() ([]byte, error)
+	getter   func(name string) ([]byte, error)
 	lastword []byte
 }
 
@@ -174,9 +174,9 @@ func (p *PasswordHolder) Ready() bool {
 	return p.getter != nil
 }
 
-func (p *PasswordHolder) Ask(retry bool) ([]byte, error) {
+func (p *PasswordHolder) Ask(name string, retry bool) ([]byte, error) {
 	if retry || p.lastword == nil {
-		value, err := p.getter()
+		value, err := p.getter(name)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +197,7 @@ type CorruptedZip struct {
 	passwordHolder PasswordHolder
 }
 
-func (cz *CorruptedZip) SetPasswordGetter(f func() ([]byte, error)) {
+func (cz *CorruptedZip) SetPasswordGetter(f func(name string) ([]byte, error)) {
 	cz.passwordHolder.getter = f
 }
 
@@ -353,7 +353,7 @@ func (cz *CorruptedZip) Scan() bool {
 		}
 		// Use cz.Header.ModifiedTime instead of CRC32.
 		// The reason is unknown.
-		b = transform.NewReader(b, newDecrypter(&cz.passwordHolder, cz.Header.ModifiedTime))
+		b = transform.NewReader(b, newDecrypter(fname, &cz.passwordHolder, cz.Header.ModifiedTime))
 	}
 	switch cz.Header.Method {
 	case Deflated:

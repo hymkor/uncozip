@@ -13,14 +13,15 @@ import (
 // var _ transform.Transformer = &decrypter{}
 
 type decrypter struct {
+	name      string // for error message
 	check     uint16
 	pwdHolder *PasswordHolder
 	key       [3]uint32
 	first     bool
 }
 
-func newDecrypter(pwdHolder *PasswordHolder, check uint16) *decrypter {
-	this := &decrypter{check: check, pwdHolder: pwdHolder}
+func newDecrypter(name string, pwdHolder *PasswordHolder, check uint16) *decrypter {
+	this := &decrypter{name: name, check: check, pwdHolder: pwdHolder}
 	this.Reset()
 	return this
 }
@@ -62,7 +63,7 @@ func (d *decrypter) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err 
 			if i >= 3 {
 				return 0, 0, PasswordError
 			}
-			pwd, err := d.pwdHolder.Ask(i > 0)
+			pwd, err := d.pwdHolder.Ask(d.name, i > 0)
 			if err != nil {
 				return 0, 0, err
 			}

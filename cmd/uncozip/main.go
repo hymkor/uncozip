@@ -37,13 +37,13 @@ func matchingPatterns(target string, patterns []string) bool {
 	return false
 }
 
-func askPassword() ([]byte, error) {
+func askPassword(name string) ([]byte, error) {
 	tty, err := tty.Open()
 	if err != nil {
 		return nil, err
 	}
 	defer tty.Close()
-	fmt.Fprint(os.Stderr, "password: ")
+	fmt.Fprintf(os.Stderr, "%s password: ", name)
 	passwordString, err := tty.ReadPassword()
 	if err != nil {
 		return nil, err
