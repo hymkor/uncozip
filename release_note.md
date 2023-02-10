@@ -1,3 +1,6 @@
+- Reduce memory consumption when bitDataDescriptorUsed is not set
+- Add a new option: -strict: quit immediately on CRC-Error
+
 v0.4.0
 ======
 Feb 10, 2023
