@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	flagDebug = flag.Bool("debug", false, "Enable debug output")
-	flagTest  = flag.Bool("t", false, "Test CRC32")
-	flagExDir = flag.String("d", "", "the directory where to extract")
+	flagDebug  = flag.Bool("debug", false, "Enable debug output")
+	flagTest   = flag.Bool("t", false, "Test CRC32")
+	flagExDir  = flag.String("d", "", "the directory where to extract")
+	flagStrict = flag.Bool("strict", false, "quit immediately on CRC-Error")
 )
 
 func matchingPatterns(target string, patterns []string) bool {
@@ -88,6 +89,10 @@ func testCRC32FromReader(r io.Reader, patterns []string) error {
 				cz.Name(), cz.Header.CRC32, checksum)
 		}
 		if checksum != cz.Header.CRC32 {
+			if *flagStrict {
+				return fmt.Errorf("%s: CRC32 is expected %X in header, but %X",
+					cz.Name(), cz.Header.CRC32, checksum)
+			}
 			fmt.Fprintf(os.Stderr,
 				"NG:   %s: CRC32 is expected %X in header, but %X\n",
 				cz.Name(), cz.Header.CRC32, checksum)
@@ -160,6 +165,10 @@ func unzipFromReader(r io.Reader, patterns []string) error {
 				cz.Name(), cz.Header.CRC32, checksum)
 		}
 		if checksum != cz.Header.CRC32 {
+			if *flagStrict {
+				return fmt.Errorf("%s: CRC32 is expected %X in header, but %X",
+					cz.Name(), cz.Header.CRC32, checksum)
+			}
 			fmt.Fprintf(os.Stderr,
 				"NG:   %s: CRC32 is expected %X in header, but %X\n",
 				cz.Name(), cz.Header.CRC32, checksum)
