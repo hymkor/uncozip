@@ -392,7 +392,7 @@ func (cz *CorruptedZip) Scan() bool {
 		var buffer bytes.Buffer
 		b = &buffer
 
-		cont, dd, err := cz.seekToSignature(&buffer)
+		hasNextEntry, dataDescriptor, err := cz.seekToSignature(&buffer)
 		if err != nil {
 			if err == io.EOF {
 				cz.err = ErrTooNearEOF
@@ -401,10 +401,10 @@ func (cz *CorruptedZip) Scan() bool {
 			}
 			return false
 		}
-		cz.Header.CRC32 = dd.CRC32
-		cz.Header.CompressedSize = dd.CompressedSize
-		cz.Header.UncompressedSize = dd.UncompressedSize
-		if !cont {
+		cz.Header.CRC32 = dataDescriptor.CRC32
+		cz.Header.CompressedSize = dataDescriptor.CompressedSize
+		cz.Header.UncompressedSize = dataDescriptor.UncompressedSize
+		if !hasNextEntry {
 			cz.br = nil
 		}
 		cz.nextSignatureAlreadyRead = true
