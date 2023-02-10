@@ -92,7 +92,7 @@ func extractEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 		_, err := io.Copy(io.Discard, rc)
 		return 0, err
 	}
-	switch cz.Header.Method {
+	switch cz.Method() {
 	case uncozip.Deflated:
 		fmt.Fprintln(os.Stderr, "  inflating:", fname)
 	case uncozip.NotCompressed:
@@ -140,17 +140,17 @@ func mainForReader(r io.Reader, patterns []string) error {
 		if err != nil {
 			return err
 		}
-		if checksum != cz.Header.CRC32 {
+		if checksum != cz.CRC32() {
 			if *flagStrict {
 				return fmt.Errorf("%s: CRC32 is expected %X in header, but %X",
-					cz.Name(), cz.Header.CRC32, checksum)
+					cz.Name(), cz.CRC32(), checksum)
 			}
 			fmt.Fprintf(os.Stderr,
 				"NG:   %s: CRC32 is expected %X in header, but %X\n",
-				cz.Name(), cz.Header.CRC32, checksum)
+				cz.Name(), cz.CRC32(), checksum)
 		} else if *flagDebug {
 			fmt.Fprintf(os.Stderr, "%s: CRC32: header=%X , body=%X\n",
-				cz.Name(), cz.Header.CRC32, checksum)
+				cz.Name(), cz.CRC32(), checksum)
 		}
 	}
 	if err := cz.Err(); err != io.EOF {

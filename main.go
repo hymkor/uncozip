@@ -29,7 +29,7 @@ const (
 	dataDescriptorSize = 4 * 3
 )
 
-type LocalFileHeader struct {
+type _LocalFileHeader struct {
 	RequiredVersion  uint16
 	Bits             uint16
 	Method           uint16
@@ -62,13 +62,13 @@ func unpackBits(source uint64, bits ...int) []int {
 }
 
 // Time returns Hour, Minute, and Second of Modificated time.
-func (h *LocalFileHeader) Time() (int, int, int) {
+func (h *_LocalFileHeader) Time() (int, int, int) {
 	tm := unpackBits(uint64(h.ModifiedTime), bitSecond, bitMin, bitHour)
 	return tm[2], tm[1], tm[0] * 2
 }
 
 // Date returns Year, Month, and Day of Modified date.
-func (h *LocalFileHeader) Date() (int, int, int) {
+func (h *_LocalFileHeader) Date() (int, int, int) {
 	dt := unpackBits(uint64(h.ModifiedDate), bitDay, bitMonth, bitYear)
 	return 1980 + dt[2], dt[1], dt[0]
 }
@@ -196,24 +196,32 @@ type CorruptedZip struct {
 
 	originalSize64   uint64
 	compressedSize64 uint64
+	header           _LocalFileHeader
+	passwordHolder   _PasswordHolder
 
-	Debug          func(...any) (int, error)
-	Header         LocalFileHeader
-	passwordHolder _PasswordHolder
+	Debug func(...any) (int, error)
+}
+
+func (cz *CorruptedZip) CRC32() uint32 {
+	return cz.header.CRC32
+}
+
+func (cz *CorruptedZip) Method() uint16 {
+	return cz.header.Method
 }
 
 func (cz *CorruptedZip) OriginalSize() uint64 {
-	if cz.originalSize64 > uint64(cz.Header.UncompressedSize) {
+	if cz.originalSize64 > uint64(cz.header.UncompressedSize) {
 		return cz.originalSize64
 	}
-	return uint64(cz.Header.UncompressedSize)
+	return uint64(cz.header.UncompressedSize)
 }
 
 func (cz *CorruptedZip) CompressedSize() uint64 {
-	if cz.compressedSize64 > uint64(cz.Header.CompressedSize) {
+	if cz.compressedSize64 > uint64(cz.header.CompressedSize) {
 		return cz.compressedSize64
 	}
-	return uint64(cz.Header.CompressedSize)
+	return uint64(cz.header.CompressedSize)
 }
 
 func (cz *CorruptedZip) SetPasswordGetter(f func(name string) ([]byte, error)) {
@@ -236,8 +244,8 @@ func (cz *CorruptedZip) Body() io.Reader {
 }
 
 func (cz *CorruptedZip) Stamp() time.Time {
-	hour, min, second := cz.Header.Time()
-	year, month, day := cz.Header.Date()
+	hour, min, second := cz.header.Time()
+	year, month, day := cz.header.Date()
 	return time.Date(year, time.Month(month), day, hour, min, second, 0, time.Local)
 }
 
@@ -282,7 +290,7 @@ func (cz *CorruptedZip) Scan() bool {
 		}
 	}
 
-	if err := binary.Read(br, binary.LittleEndian, &cz.Header); err != nil {
+	if err := binary.Read(br, binary.LittleEndian, &cz.header); err != nil {
 		if err == io.EOF {
 			cz.err = ErrTooNearEOF
 		} else {
@@ -290,7 +298,7 @@ func (cz *CorruptedZip) Scan() bool {
 		}
 		return false
 	}
-	name := make([]byte, cz.Header.FilenameLength)
+	name := make([]byte, cz.header.FilenameLength)
 
 	if _, err := io.ReadFull(br, name[:]); err != nil {
 		if err == io.EOF {
@@ -301,7 +309,7 @@ func (cz *CorruptedZip) Scan() bool {
 		return false
 	}
 	var fname string
-	if (cz.Header.Bits & bitEncodedUTF8) != 0 {
+	if (cz.header.Bits & bitEncodedUTF8) != 0 {
 		fname = string(name)
 	} else {
 		var err error
@@ -317,14 +325,14 @@ func (cz *CorruptedZip) Scan() bool {
 	cz.name = fname
 
 	// skip ExtendField
-	cz.Debug("LocalFileHeader.ExtendFieldSize:", cz.Header.ExtendFieldSize)
-	if cz.Header.ExtendFieldSize > 0 {
+	cz.Debug("LocalFileHeader.ExtendFieldSize:", cz.header.ExtendFieldSize)
+	if cz.header.ExtendFieldSize > 0 {
 		var header struct {
 			ID   uint16
 			Size uint16
 		}
 
-		left := cz.Header.ExtendFieldSize
+		left := cz.header.ExtendFieldSize
 		for left >= 4 {
 			err := binary.Read(br, binary.LittleEndian, &header)
 			if err != nil {
@@ -377,11 +385,11 @@ func (cz *CorruptedZip) Scan() bool {
 			}
 		}
 	}
-	cz.Debug("LocalFileHeader.CompressSize:", cz.Header.CompressedSize)
-	cz.Debug("LocalFileHeader.UncompressedSize:", cz.Header.UncompressedSize)
+	cz.Debug("LocalFileHeader.CompressSize:", cz.header.CompressedSize)
+	cz.Debug("LocalFileHeader.UncompressedSize:", cz.header.UncompressedSize)
 	isDir := len(fname) > 0 && fname[len(fname)-1] == '/'
 	if isDir {
-		if (cz.Header.Bits & bitDataDescriptorUsed) != 0 {
+		if (cz.header.Bits & bitDataDescriptorUsed) != 0 {
 			hasNextEntry, _, err := seekToSignature(cz.br, io.Discard, cz.Debug)
 			if err != nil {
 				cz.err = err
@@ -407,7 +415,7 @@ func (cz *CorruptedZip) Scan() bool {
 
 	var b io.Reader
 
-	if (cz.Header.Bits & bitDataDescriptorUsed) != 0 {
+	if (cz.header.Bits & bitDataDescriptorUsed) != 0 {
 		cz.Debug("LocalFileHeader.Bits: bitDataDescriptorUsed is set")
 		var buffer bytes.Buffer
 		b = &buffer
@@ -421,9 +429,9 @@ func (cz *CorruptedZip) Scan() bool {
 			}
 			return false
 		}
-		cz.Header.CRC32 = dataDescriptor.CRC32
-		cz.Header.CompressedSize = dataDescriptor.CompressedSize
-		cz.Header.UncompressedSize = dataDescriptor.UncompressedSize
+		cz.header.CRC32 = dataDescriptor.CRC32
+		cz.header.CompressedSize = dataDescriptor.CompressedSize
+		cz.header.UncompressedSize = dataDescriptor.UncompressedSize
 		if !hasNextEntry {
 			cz.br = nil
 		}
@@ -433,16 +441,16 @@ func (cz *CorruptedZip) Scan() bool {
 		b = &io.LimitedReader{R: br, N: int64(cz.CompressedSize())}
 		cz.nextSignatureAlreadyRead = false
 	}
-	if (cz.Header.Bits & bitEncrypted) != 0 {
+	if (cz.header.Bits & bitEncrypted) != 0 {
 		if !cz.passwordHolder.Ready() {
 			cz.err = &ErrPassword{name: fname}
 			return false
 		}
-		// Use cz.Header.ModifiedTime instead of CRC32.
+		// Use cz.header.ModifiedTime instead of CRC32.
 		// The reason is unknown.
-		b = transform.NewReader(b, newDecrypter(fname, &cz.passwordHolder, cz.Header.ModifiedTime))
+		b = transform.NewReader(b, newDecrypter(fname, &cz.passwordHolder, cz.header.ModifiedTime))
 	}
-	switch cz.Header.Method {
+	switch cz.header.Method {
 	case Deflated:
 		cz.body = flate.NewReader(b)
 		return true
@@ -450,7 +458,7 @@ func (cz *CorruptedZip) Scan() bool {
 		cz.body = io.NopCloser(b)
 		return true
 	default:
-		cz.err = fmt.Errorf("Compression Method(%d) is not supported", cz.Header.Method)
+		cz.err = fmt.Errorf("Compression Method(%d) is not supported", cz.header.Method)
 		return false
 	}
 }
