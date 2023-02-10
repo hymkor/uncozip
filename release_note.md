@@ -1,5 +1,15 @@
+v0.4.0
+======
+Feb 10, 2023
+
 - Support ZIP64
 - Support encrypted zip
+
+v0.3.1
+======
+Jan 29, 2023
+
+- Some internal fixes as a library
 
 v0.3.0
 ======
