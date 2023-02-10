@@ -52,67 +52,79 @@ func askPassword(name string) ([]byte, error) {
 	return []byte(passwordString), nil
 }
 
-func testCRC32FromReader(r io.Reader, patterns []string) error {
-	cz, err := uncozip.New(r)
-	if err != nil {
-		return err
+func testEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
+	rc := cz.Body()
+	if rc == nil {
+		// directory
+		fmt.Fprintf(os.Stderr, "SKIP: %s\n", cz.Name())
+		return 0, nil
 	}
-	cz.SetPasswordGetter(askPassword)
-	if *flagDebug {
-		cz.Debug = func(args ...any) (int, error) {
-			return fmt.Fprintln(os.Stderr, args...)
-		}
-	}
-	for cz.Scan() {
-		rc := cz.Body()
-		if rc == nil {
-			// directory
-			fmt.Fprintf(os.Stderr, "SKIP: %s\n", cz.Name())
-			continue
-		}
-		if !matchingPatterns(cz.Name(), patterns) {
-			// not specified
-			_, err := io.Copy(io.Discard, rc)
-			if err != nil {
-				return err
-			}
-			continue
-		}
-		h := crc32.NewIEEE()
-		_, err = io.Copy(h, rc)
+	if !matchingPatterns(cz.Name(), patterns) {
+		// not specified
+		_, err := io.Copy(io.Discard, rc)
 		if err != nil {
-			return err
+			return 0, err
 		}
-		checksum := h.Sum32()
-		if *flagDebug {
-			fmt.Fprintf(os.Stderr, "%s: CRC32: header=%X , body=%X\n",
-				cz.Name(), cz.Header.CRC32, checksum)
-		}
-		if checksum != cz.Header.CRC32 {
-			if *flagStrict {
-				return fmt.Errorf("%s: CRC32 is expected %X in header, but %X",
-					cz.Name(), cz.Header.CRC32, checksum)
-			}
-			fmt.Fprintf(os.Stderr,
-				"NG:   %s: CRC32 is expected %X in header, but %X\n",
-				cz.Name(), cz.Header.CRC32, checksum)
-		} else {
-			hour, min, second := cz.Header.Time()
-			year, month, day := cz.Header.Date()
-			fmt.Fprintf(os.Stderr,
-				"%9d %04d/%02d/%02d %02d:%02d:%02d %s\n",
-				cz.OriginalSize(),
-				year, month, day, hour, min,
-				second, cz.Name())
-		}
+		return 0, nil
 	}
-	if err := cz.Err(); err != io.EOF {
-		return err
+	h := crc32.NewIEEE()
+	_, err := io.Copy(h, rc)
+	if err != nil {
+		return 0, err
 	}
-	return nil
+	hour, min, second := cz.Header.Time()
+	year, month, day := cz.Header.Date()
+	fmt.Fprintf(os.Stderr,
+		"%9d %04d/%02d/%02d %02d:%02d:%02d %s\n",
+		cz.OriginalSize(),
+		year, month, day, hour, min,
+		second, cz.Name())
+	return h.Sum32(), nil
 }
 
-func unzipFromReader(r io.Reader, patterns []string) error {
+func extractEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
+	fname := cz.Name()
+	rc := cz.Body()
+	if rc == nil {
+		fmt.Fprintln(os.Stderr, "   creating:", fname)
+		if err := os.Mkdir(fname, 0644); err != nil && !os.IsExist(err) {
+			return 0, err
+		}
+		return 0, nil
+	}
+	if !matchingPatterns(fname, patterns) {
+		_, err := io.Copy(io.Discard, rc)
+		return 0, err
+	}
+	switch cz.Header.Method {
+	case uncozip.Deflated:
+		fmt.Fprintln(os.Stderr, "  inflating:", fname)
+	case uncozip.NotCompressed:
+		fmt.Fprintln(os.Stderr, " extracting:", fname)
+	}
+	fd, err := os.Create(fname)
+	if err != nil {
+		return 0, err
+	}
+	h := crc32.NewIEEE()
+	_, err = io.Copy(fd, io.TeeReader(rc, h))
+	err1 := fd.Close()
+	if err != nil {
+		return 0, err
+	}
+	if err1 != nil {
+		return 0, err1
+	}
+	hour, min, second := cz.Header.Time()
+	year, month, day := cz.Header.Date()
+	stamp := time.Date(year, time.Month(month), day, hour, min, second, 0, time.Local)
+	if err := os.Chtimes(fname, stamp, stamp); err != nil {
+		fmt.Fprintln(os.Stderr, fname, err.Error())
+	}
+	return h.Sum32(), nil
+}
+
+func mainForReader(r io.Reader, patterns []string) error {
 	cz, err := uncozip.New(r)
 	if err != nil {
 		return err
@@ -124,45 +136,15 @@ func unzipFromReader(r io.Reader, patterns []string) error {
 		}
 	}
 	for cz.Scan() {
-		fname := cz.Name()
-		rc := cz.Body()
-		if rc == nil {
-			fmt.Fprintln(os.Stderr, "   creating:", fname)
-			if err := os.Mkdir(fname, 0644); err != nil && !os.IsExist(err) {
-				return err
-			}
-			continue
+		var err error
+		var checksum uint32
+		if *flagTest {
+			checksum, err = testEntry(cz, patterns)
+		} else {
+			checksum, err = extractEntry(cz, patterns)
 		}
-		if !matchingPatterns(fname, patterns) {
-			_, err := io.Copy(io.Discard, rc)
-			if err != nil {
-				return err
-			}
-			continue
-		}
-		switch cz.Header.Method {
-		case uncozip.Deflated:
-			fmt.Fprintln(os.Stderr, "  inflating:", fname)
-		case uncozip.NotCompressed:
-			fmt.Fprintln(os.Stderr, " extracting:", fname)
-		}
-		fd, err := os.Create(fname)
 		if err != nil {
 			return err
-		}
-		h := crc32.NewIEEE()
-		_, err = io.Copy(fd, io.TeeReader(rc, h))
-		err1 := fd.Close()
-		if err != nil {
-			return err
-		}
-		if err1 != nil {
-			return err1
-		}
-		checksum := h.Sum32()
-		if *flagDebug {
-			fmt.Fprintf(os.Stderr, "%s: CRC32: header=%X , body=%X\n",
-				cz.Name(), cz.Header.CRC32, checksum)
 		}
 		if checksum != cz.Header.CRC32 {
 			if *flagStrict {
@@ -172,12 +154,9 @@ func unzipFromReader(r io.Reader, patterns []string) error {
 			fmt.Fprintf(os.Stderr,
 				"NG:   %s: CRC32 is expected %X in header, but %X\n",
 				cz.Name(), cz.Header.CRC32, checksum)
-		}
-		hour, min, second := cz.Header.Time()
-		year, month, day := cz.Header.Date()
-		stamp := time.Date(year, time.Month(month), day, hour, min, second, 0, time.Local)
-		if err := os.Chtimes(fname, stamp, stamp); err != nil {
-			fmt.Fprintln(os.Stderr, fname, err.Error())
+		} else if *flagDebug {
+			fmt.Fprintf(os.Stderr, "%s: CRC32: header=%X , body=%X\n",
+				cz.Name(), cz.Header.CRC32, checksum)
 		}
 	}
 	if err := cz.Err(); err != io.EOF {
@@ -187,10 +166,6 @@ func unzipFromReader(r io.Reader, patterns []string) error {
 }
 
 func mains(args []string) error {
-	f := unzipFromReader
-	if *flagTest {
-		f = testCRC32FromReader
-	}
 	if len(args) <= 0 {
 		if term.IsTerminal(int(os.Stdin.Fd())) {
 			fmt.Fprintf(os.Stderr, "%s %s-%s-%s by %s\n",
@@ -202,13 +177,13 @@ func mains(args []string) error {
 			flag.PrintDefaults()
 			return nil
 		} else {
-			return f(os.Stdin, args)
+			return mainForReader(os.Stdin, args)
 		}
 	}
 	fname := args[0]
 	args = args[1:]
 	if fname == "-" {
-		return f(os.Stdin, args)
+		return mainForReader(os.Stdin, args)
 	}
 	fd, err := os.Open(fname)
 	if err != nil {
@@ -228,7 +203,7 @@ func mains(args []string) error {
 			return err
 		}
 	}
-	err = f(fd, args)
+	err = mainForReader(fd, args)
 	err1 := fd.Close()
 	if err != nil {
 		return err
