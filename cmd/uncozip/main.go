@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"golang.org/x/term"
 
@@ -72,13 +71,10 @@ func testEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
-	hour, min, second := cz.Header.Time()
-	year, month, day := cz.Header.Date()
-	fmt.Fprintf(os.Stderr,
-		"%9d %04d/%02d/%02d %02d:%02d:%02d %s\n",
+	fmt.Fprintf(os.Stderr, "%9d %s %s\n",
 		cz.OriginalSize(),
-		year, month, day, hour, min,
-		second, cz.Name())
+		cz.Stamp().Format("2006/01/02 15:04:05"),
+		cz.Name())
 	return h.Sum32(), nil
 }
 
@@ -115,9 +111,7 @@ func extractEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 	if err1 != nil {
 		return 0, err1
 	}
-	hour, min, second := cz.Header.Time()
-	year, month, day := cz.Header.Date()
-	stamp := time.Date(year, time.Month(month), day, hour, min, second, 0, time.Local)
+	stamp := cz.Stamp()
 	if err := os.Chtimes(fname, stamp, stamp); err != nil {
 		fmt.Fprintln(os.Stderr, fname, err.Error())
 	}

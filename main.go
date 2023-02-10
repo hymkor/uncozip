@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"strings"
+	"time"
 
 	"golang.org/x/text/transform"
 
@@ -232,6 +233,12 @@ func (cz *CorruptedZip) Err() error {
 // Body returns the reader of the most recent file by a call to Scan.
 func (cz *CorruptedZip) Body() io.Reader {
 	return cz.body
+}
+
+func (cz *CorruptedZip) Stamp() time.Time {
+	hour, min, second := cz.Header.Time()
+	year, month, day := cz.Header.Date()
+	return time.Date(year, time.Month(month), day, hour, min, second, 0, time.Local)
 }
 
 // New returns a CorruptedZip instance that reads a ZIP archive.
