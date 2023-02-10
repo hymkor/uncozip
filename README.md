@@ -21,6 +21,7 @@ uncozip {OPTIONS} < ZIPFILENAME
 
 * `-d string` the directory where to extract
 * `-debug` Enable debug output
+* `-strict` quit immediately on CRC-Error
 * `-t` Test CRC32 only
 
 Install
