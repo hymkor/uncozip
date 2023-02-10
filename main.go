@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 
 	"golang.org/x/text/transform"
@@ -371,19 +372,27 @@ func (cz *CorruptedZip) Scan() bool {
 	}
 	cz.Debug("LocalFileHeader.CompressSize:", cz.Header.CompressedSize)
 	cz.Debug("LocalFileHeader.UncompressedSize:", cz.Header.UncompressedSize)
-	var buffer bytes.Buffer
-	var w io.Writer
-
 	isDir := len(fname) > 0 && fname[len(fname)-1] == '/'
 	if isDir {
-		w = io.Discard
-	} else {
-		w = &buffer
+		size := cz.CompressedSize()
+		if size > math.MaxInt {
+			panic("directory: " + fname + ":compress size is larget than math.MaxInt")
+		}
+		if _, err := br.Discard(int(size)); err != nil {
+			cz.err = err
+			return false
+		}
+		return true
 	}
+
+	var b io.Reader
 
 	if (cz.Header.Bits & bitDataDescriptorUsed) != 0 {
 		cz.Debug("LocalFileHeader.Bits: bitDataDescriptorUsed is set")
-		cont, dd, err := cz.seekToSignature(w)
+		var buffer bytes.Buffer
+		b = &buffer
+
+		cont, dd, err := cz.seekToSignature(&buffer)
 		if err != nil {
 			if err == io.EOF {
 				cz.err = ErrTooNearEOF
@@ -401,20 +410,9 @@ func (cz *CorruptedZip) Scan() bool {
 		cz.nextSignatureAlreadyRead = true
 	} else {
 		cz.Debug("LocalFileHeader.Bits: bitDataDescriptorUsed is not set")
-		if _, err := io.CopyN(w, br, int64(cz.CompressedSize())); err != nil {
-			if err == io.EOF {
-				cz.err = ErrTooNearEOF
-			} else {
-				cz.err = err
-			}
-			return false
-		}
+		b = &io.LimitedReader{R: br, N: int64(cz.CompressedSize())}
 		cz.nextSignatureAlreadyRead = false
 	}
-	if isDir {
-		return true
-	}
-	var b io.Reader = &buffer
 	if (cz.Header.Bits & bitEncrypted) != 0 {
 		if !cz.passwordHolder.Ready() {
 			cz.err = &ErrPassword{name: fname}
