@@ -374,13 +374,26 @@ func (cz *CorruptedZip) Scan() bool {
 	cz.Debug("LocalFileHeader.UncompressedSize:", cz.Header.UncompressedSize)
 	isDir := len(fname) > 0 && fname[len(fname)-1] == '/'
 	if isDir {
-		size := cz.CompressedSize()
-		if size > math.MaxInt {
-			panic("directory: " + fname + ":compress size is larget than math.MaxInt")
-		}
-		if _, err := br.Discard(int(size)); err != nil {
-			cz.err = err
-			return false
+		if (cz.Header.Bits & bitDataDescriptorUsed) != 0 {
+			hasNextEntry, _, err := seekToSignature(cz.br, io.Discard, cz.Debug)
+			if err != nil {
+				cz.err = err
+				return false
+			}
+			if !hasNextEntry {
+				cz.br = nil
+			}
+			cz.nextSignatureAlreadyRead = true
+		} else {
+			size := cz.CompressedSize()
+			if size > math.MaxInt {
+				panic("directory: " + fname + ":compress size is larget than math.MaxInt")
+			}
+			if _, err := br.Discard(int(size)); err != nil {
+				cz.err = err
+				return false
+			}
+			cz.nextSignatureAlreadyRead = false
 		}
 		return true
 	}
