@@ -103,7 +103,7 @@ func checkDataDescriptor(buffer []byte) *_DataDescriptor {
 	return &desc
 }
 
-func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *_DataDescriptor, error) {
+func seekToSignature(r io.ByteReader, w io.Writer, debug func(...any) (int, error)) (bool, *_DataDescriptor, error) {
 	const (
 		max = 100
 		min = sigSize + dataDescriptorSize + sigSize
@@ -112,7 +112,7 @@ func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *_DataDescriptor, er
 	buffer := make([]byte, 0, max)
 	count := 0
 	for {
-		ch, err := cz.br.ReadByte()
+		ch, err := r.ReadByte()
 		if err != nil {
 			w.Write(buffer)
 			return false, nil, err
@@ -128,13 +128,13 @@ func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *_DataDescriptor, er
 					size := int(dd.CompressedSize)
 					if size == count-sigSize-dataDescriptorSize {
 						w.Write(buffer[:len(buffer)-sigSize-dataDescriptorSize])
-						cz.Debug("Found DetaDescripture without signature")
+						debug("Found DetaDescripture without signature")
 						return true, dd, nil
 					}
 					if size == count-sigSize-dataDescriptorSize-sigSize &&
 						bytes.HasSuffix(buffer[:len(buffer)-sigSize-dataDescriptorSize], sigDataDescriptor) {
 						w.Write(buffer[:len(buffer)-sigSize-dataDescriptorSize-sigSize])
-						cz.Debug("Found DataDescriptor with signature")
+						debug("Found DataDescriptor with signature")
 						return true, dd, nil
 					}
 				}
@@ -146,13 +146,13 @@ func (cz *CorruptedZip) seekToSignature(w io.Writer) (bool, *_DataDescriptor, er
 					size := int(dd.CompressedSize)
 					if size == count-sigSize-dataDescriptorSize {
 						w.Write(buffer[:len(buffer)-sigSize-dataDescriptorSize])
-						cz.Debug("Found DetaDescripture without signature")
+						debug("Found DetaDescripture without signature")
 						return false, dd, nil
 					}
 					if size == count-sigSize-dataDescriptorSize-sigSize &&
 						bytes.HasSuffix(buffer[:len(buffer)-sigSize-dataDescriptorSize], sigDataDescriptor) {
 						w.Write(buffer[:len(buffer)-sigSize-dataDescriptorSize-sigSize])
-						cz.Debug("Found DetaDescripture with signature")
+						debug("Found DetaDescripture with signature")
 						return false, dd, nil
 					}
 				}
@@ -392,7 +392,7 @@ func (cz *CorruptedZip) Scan() bool {
 		var buffer bytes.Buffer
 		b = &buffer
 
-		hasNextEntry, dataDescriptor, err := cz.seekToSignature(&buffer)
+		hasNextEntry, dataDescriptor, err := seekToSignature(cz.br, &buffer, cz.Debug)
 		if err != nil {
 			if err == io.EOF {
 				cz.err = ErrTooNearEOF
