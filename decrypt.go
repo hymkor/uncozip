@@ -50,14 +50,17 @@ func (d *decrypter) decrypt(b byte) byte {
 	return tmp
 }
 
+// ErrPassword is an error reporting that password is invalid.
 type ErrPassword struct {
 	name string
 }
 
+// Error returns an error message.
 func (e *ErrPassword) Error() string {
 	return "Password error"
 }
 
+// Name returns a entry filename where an error occured
 func (e *ErrPassword) Name() string {
 	return e.name
 }

@@ -187,6 +187,7 @@ func (p *_PasswordHolder) Ask(name string, retry bool) ([]byte, error) {
 	return p.lastword, nil
 }
 
+// CorruptedZip is a reader for a ZIP archive that reads from io.Reader instead of io.ReaderAt
 type CorruptedZip struct {
 	br                       *bufio.Reader
 	name                     string
@@ -202,14 +203,17 @@ type CorruptedZip struct {
 	Debug func(...any) (int, error)
 }
 
+// CRC32 returns CRC32 value written in the local file header
 func (cz *CorruptedZip) CRC32() uint32 {
 	return cz.header.CRC32
 }
 
+// Method returns the mothod to compress the current entry data
 func (cz *CorruptedZip) Method() uint16 {
 	return cz.header.Method
 }
 
+// OriginalSize returns the original file size of the most recent entry
 func (cz *CorruptedZip) OriginalSize() uint64 {
 	if cz.originalSize64 > uint64(cz.header.UncompressedSize) {
 		return cz.originalSize64
@@ -217,6 +221,7 @@ func (cz *CorruptedZip) OriginalSize() uint64 {
 	return uint64(cz.header.UncompressedSize)
 }
 
+// CompressedSize returns the compressed size of the most recent entry
 func (cz *CorruptedZip) CompressedSize() uint64 {
 	if cz.compressedSize64 > uint64(cz.header.CompressedSize) {
 		return cz.compressedSize64
@@ -224,6 +229,7 @@ func (cz *CorruptedZip) CompressedSize() uint64 {
 	return uint64(cz.header.CompressedSize)
 }
 
+// SetPasswordGetter sets a callback function to query password to an user.
 func (cz *CorruptedZip) SetPasswordGetter(f func(name string) ([]byte, error)) {
 	cz.passwordHolder.getter = f
 }
@@ -243,6 +249,7 @@ func (cz *CorruptedZip) Body() io.Reader {
 	return cz.body
 }
 
+// Stamp returns the modificated time of the most recent file by a call to Scan.
 func (cz *CorruptedZip) Stamp() time.Time {
 	hour, min, second := cz.header.Time()
 	year, month, day := cz.header.Date()
