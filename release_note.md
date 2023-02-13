@@ -1,3 +1,9 @@
+- Reduce memory consumption regardless of whether a data descriptor is used or not
+- Use io.ErrUnexpectedEOF instead of uncozip.ErrTooNearEOF
+- Rename constants compatible to "archive/zip"
+    - Deflated to Deflate
+    - NotCompressed to Store
+
 v0.4.1
 ======
 Feb 11, 2023
