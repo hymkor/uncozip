@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/text/transform"
@@ -186,46 +187,50 @@ func (p *_PasswordHolder) Ask(name string, retry bool) ([]byte, error) {
 	return p.lastword, nil
 }
 
+type readResult struct {
+	*_DataDescriptor
+	hasNextEntry bool
+	err          error
+}
+
+type lazyReadResult struct {
+	channel chan readResult
+	once    sync.Once
+	value   readResult
+}
+
+func (u *lazyReadResult) Value() *readResult {
+	u.once.Do(func() {
+		u.value = <-u.channel
+		close(u.channel)
+	})
+	return &u.value
+}
+
 // CorruptedZip is a reader for a ZIP archive that reads from io.Reader instead of io.ReaderAt
 type CorruptedZip struct {
+	closers                  []io.Closer
 	br                       *bufio.Reader
 	name                     string
-	body                     io.ReadCloser
+	body                     io.Reader
 	err                      error
 	nextSignatureAlreadyRead bool
 
-	originalSize64   uint64
-	compressedSize64 uint64
-	header           _LocalFileHeader
-	passwordHolder   _PasswordHolder
+	OriginalSize   func() uint64
+	CompressedSize func() uint64
+	CRC32          func() uint32
+	hasNextEntry   func() bool
+	bgErr          func() error
+
+	header         _LocalFileHeader
+	passwordHolder _PasswordHolder
 
 	Debug func(...any) (int, error)
-}
-
-// CRC32 returns CRC32 value written in the local file header
-func (cz *CorruptedZip) CRC32() uint32 {
-	return cz.header.CRC32
 }
 
 // Method returns the mothod to compress the current entry data
 func (cz *CorruptedZip) Method() uint16 {
 	return cz.header.Method
-}
-
-// OriginalSize returns the original file size of the most recent entry
-func (cz *CorruptedZip) OriginalSize() uint64 {
-	if cz.originalSize64 > uint64(cz.header.UncompressedSize) {
-		return cz.originalSize64
-	}
-	return uint64(cz.header.UncompressedSize)
-}
-
-// CompressedSize returns the compressed size of the most recent entry
-func (cz *CorruptedZip) CompressedSize() uint64 {
-	if cz.compressedSize64 > uint64(cz.header.CompressedSize) {
-		return cz.compressedSize64
-	}
-	return uint64(cz.header.CompressedSize)
 }
 
 // SetPasswordGetter sets a callback function to query password to an user.
@@ -240,7 +245,10 @@ func (cz *CorruptedZip) Name() string {
 
 // Err returns the error encountered by the CorruptedZip.
 func (cz *CorruptedZip) Err() error {
-	return cz.err
+	if cz.err != nil {
+		return cz.err
+	}
+	return cz.bgErr()
 }
 
 // Body returns the reader of the most recent file by a call to Scan.
@@ -258,27 +266,36 @@ func (cz *CorruptedZip) Stamp() time.Time {
 // New returns a CorruptedZip instance that reads a ZIP archive.
 func New(r io.Reader) (*CorruptedZip, error) {
 	return &CorruptedZip{
-		br:    bufio.NewReader(r),
-		Debug: func(...any) (int, error) { return 0, nil },
+		br:           bufio.NewReader(r),
+		Debug:        func(...any) (int, error) { return 0, nil },
+		bgErr:        func() error { return nil },
+		hasNextEntry: func() bool { return true },
 	}, nil
 }
 
 // Scan advances the CorruptedZip to the next single file in a ZIP archive.
 func (cz *CorruptedZip) Scan() bool {
-	if cz.body != nil {
-		cz.body.Close()
-		cz.body = nil
+	if cz.closers != nil {
+		for _, c := range cz.closers {
+			c.Close()
+		}
+		cz.closers = cz.closers[:0]
 	}
-	br := cz.br
-	if br == nil {
+	if err := cz.bgErr(); err != nil {
+		cz.err = err
+		return false
+	}
+	if !cz.hasNextEntry() {
 		cz.err = io.EOF
 		return false
 	}
+
 	cz.err = nil
+	cz.body = nil
 
 	if !cz.nextSignatureAlreadyRead {
 		var signature [4]byte
-		if _, err := io.ReadFull(br, signature[:]); err != nil {
+		if _, err := io.ReadFull(cz.br, signature[:]); err != nil {
 			if err == io.EOF {
 				cz.err = io.ErrUnexpectedEOF
 			} else {
@@ -296,7 +313,7 @@ func (cz *CorruptedZip) Scan() bool {
 		}
 	}
 
-	if err := binary.Read(br, binary.LittleEndian, &cz.header); err != nil {
+	if err := binary.Read(cz.br, binary.LittleEndian, &cz.header); err != nil {
 		if err == io.EOF {
 			cz.err = io.ErrUnexpectedEOF
 		} else {
@@ -304,9 +321,15 @@ func (cz *CorruptedZip) Scan() bool {
 		}
 		return false
 	}
+	cz.OriginalSize = func() uint64 { return uint64(cz.header.UncompressedSize) }
+	cz.CompressedSize = func() uint64 { return uint64(cz.header.CompressedSize) }
+	cz.CRC32 = func() uint32 { return cz.header.CRC32 }
+	cz.bgErr = func() error { return nil }
+	cz.hasNextEntry = func() bool { return true }
+
 	name := make([]byte, cz.header.FilenameLength)
 
-	if _, err := io.ReadFull(br, name[:]); err != nil {
+	if _, err := io.ReadFull(cz.br, name[:]); err != nil {
 		if err == io.EOF {
 			cz.err = io.ErrUnexpectedEOF
 		} else {
@@ -330,7 +353,6 @@ func (cz *CorruptedZip) Scan() bool {
 	fname = strings.TrimLeft(fname, "/")
 	cz.name = fname
 
-	// skip ExtendField
 	cz.Debug("LocalFileHeader.ExtendFieldSize:", cz.header.ExtendFieldSize)
 	if cz.header.ExtendFieldSize > 0 {
 		var header struct {
@@ -340,7 +362,7 @@ func (cz *CorruptedZip) Scan() bool {
 
 		left := cz.header.ExtendFieldSize
 		for left >= 4 {
-			err := binary.Read(br, binary.LittleEndian, &header)
+			err := binary.Read(cz.br, binary.LittleEndian, &header)
 			if err != nil {
 				cz.err = fmt.Errorf("ExtendField Error: %w", err)
 				return false
@@ -349,31 +371,36 @@ func (cz *CorruptedZip) Scan() bool {
 			left -= 4 + header.Size
 			if header.ID == 0x0001 && header.Size >= 8 {
 				leftSize := header.Size
-				err = binary.Read(br, binary.LittleEndian, &cz.originalSize64)
+				var origSize uint64
+				err = binary.Read(cz.br, binary.LittleEndian, &origSize)
 				if err != nil {
 					cz.err = fmt.Errorf("ZIP64 Header: originalSize field broken: %w", err)
 					return false
 				}
-				cz.Debug("ExtendField: ZIP64.OriginalSize:", cz.originalSize64)
+				cz.OriginalSize = func() uint64 { return origSize }
+
+				cz.Debug("ExtendField: ZIP64.OriginalSize:", origSize)
 				leftSize -= 8
 				if leftSize >= 8 {
-					err = binary.Read(br, binary.LittleEndian, &cz.compressedSize64)
+					var compSize uint64
+					err = binary.Read(cz.br, binary.LittleEndian, &compSize)
 					if err != nil {
 						cz.err = fmt.Errorf("ZIP64 Header: compressSize field broken: %w", err)
 						return false
 					}
+					cz.CompressedSize = func() uint64 { return compSize }
 					leftSize -= 8
-					cz.Debug("ExtendField: ZIP64.CompressSize:", cz.compressedSize64)
+					cz.Debug("ExtendField: ZIP64.CompressSize:", compSize)
 				}
 				if leftSize > 0 {
-					if _, err = br.Discard(int(leftSize)); err != nil {
+					if _, err = cz.br.Discard(int(leftSize)); err != nil {
 						cz.err = fmt.Errorf("ZIP64 Header: left field broen: %w", err)
 						return false
 					}
 				}
 			} else {
 				if header.Size > 0 {
-					if _, err = br.Discard(int(header.Size)); err != nil {
+					if _, err = cz.br.Discard(int(header.Size)); err != nil {
 						cz.err = err
 						return false
 					}
@@ -381,7 +408,7 @@ func (cz *CorruptedZip) Scan() bool {
 			}
 		}
 		if left > 0 {
-			if _, err := br.Discard(int(left)); err != nil {
+			if _, err := cz.br.Discard(int(left)); err != nil {
 				if err == io.EOF {
 					cz.err = io.ErrUnexpectedEOF
 				} else {
@@ -401,16 +428,14 @@ func (cz *CorruptedZip) Scan() bool {
 				cz.err = err
 				return false
 			}
-			if !hasNextEntry {
-				cz.br = nil
-			}
+			cz.hasNextEntry = func() bool { return hasNextEntry }
 			cz.nextSignatureAlreadyRead = true
 		} else {
 			size := cz.CompressedSize()
 			if size > math.MaxInt {
 				panic("directory: " + fname + ":compress size is larget than math.MaxInt")
 			}
-			if _, err := br.Discard(int(size)); err != nil {
+			if _, err := cz.br.Discard(int(size)); err != nil {
 				cz.err = err
 				return false
 			}
@@ -423,28 +448,43 @@ func (cz *CorruptedZip) Scan() bool {
 
 	if (cz.header.Bits & bitDataDescriptorUsed) != 0 {
 		cz.Debug("LocalFileHeader.Bits: bitDataDescriptorUsed is set")
-		var buffer bytes.Buffer
-		b = &buffer
 
-		hasNextEntry, dataDescriptor, err := seekToSignature(cz.br, &buffer, cz.Debug)
-		if err != nil {
-			if err == io.EOF {
-				cz.err = ErrTooNearEOF
-			} else {
-				cz.err = err
+		c := make(chan readResult)
+
+		ch := &lazyReadResult{channel: c}
+		cz.OriginalSize = func() uint64 {
+			return uint64(ch.Value().UncompressedSize)
+		}
+		cz.CompressedSize = func() uint64 {
+			return uint64(ch.Value().CompressedSize)
+		}
+		cz.CRC32 = func() uint32 {
+			return ch.Value().CRC32
+		}
+		cz.bgErr = func() error {
+			return ch.Value().err
+		}
+		cz.hasNextEntry = func() bool {
+			return ch.Value().hasNextEntry
+		}
+
+		pipeR, pipeW := io.Pipe()
+		cz.closers = append(cz.closers, pipeR)
+		b = pipeR
+
+		go func() {
+			hasNextEntry, dataDescriptor, err := seekToSignature(cz.br, pipeW, cz.Debug)
+			pipeW.Close()
+			cz.nextSignatureAlreadyRead = true
+			c <- readResult{
+				_DataDescriptor: dataDescriptor,
+				hasNextEntry:    hasNextEntry,
+				err:             err,
 			}
-			return false
-		}
-		cz.header.CRC32 = dataDescriptor.CRC32
-		cz.header.CompressedSize = dataDescriptor.CompressedSize
-		cz.header.UncompressedSize = dataDescriptor.UncompressedSize
-		if !hasNextEntry {
-			cz.br = nil
-		}
-		cz.nextSignatureAlreadyRead = true
+		}()
 	} else {
 		cz.Debug("LocalFileHeader.Bits: bitDataDescriptorUsed is not set")
-		b = &io.LimitedReader{R: br, N: int64(cz.CompressedSize())}
+		b = &io.LimitedReader{R: cz.br, N: int64(cz.CompressedSize())}
 		cz.nextSignatureAlreadyRead = false
 	}
 	if (cz.header.Bits & bitEncrypted) != 0 {
@@ -458,10 +498,12 @@ func (cz *CorruptedZip) Scan() bool {
 	}
 	switch cz.header.Method {
 	case Deflated:
-		cz.body = flate.NewReader(b)
+		zr := flate.NewReader(b)
+		cz.body = zr
+		cz.closers = append(cz.closers, zr)
 		return true
 	case NotCompressed:
-		cz.body = io.NopCloser(b)
+		cz.body = b
 		return true
 	default:
 		cz.err = fmt.Errorf("Compression Method(%d) is not supported", cz.header.Method)
