@@ -283,9 +283,6 @@ func (cz *CorruptedZip) readFilenameField() error {
 	name := make([]byte, cz.header.FilenameLength)
 
 	if _, err := io.ReadFull(cz.br, name[:]); err != nil {
-		if err == io.EOF {
-			return io.ErrUnexpectedEOF
-		}
 		return err
 	}
 	var fname string
@@ -367,51 +364,34 @@ func (cz *CorruptedZip) readExtendField() (err error) {
 	return nil
 }
 
-// Scan advances the CorruptedZip to the next single file in a ZIP archive.
-func (cz *CorruptedZip) Scan() bool {
+func (cz *CorruptedZip) scan() error {
 	for _, c := range cz.closers {
 		c.Close()
 	}
 	cz.closers = cz.closers[:0]
 	if err := cz.bgErr(); err != nil {
-		cz.err = err
-		return false
+		return err
 	}
 	if !cz.hasNextEntry() {
-		cz.err = io.EOF
-		return false
+		return io.EOF
 	}
-
-	cz.err = nil
 	cz.body = nil
 
 	if !cz.nextSignatureAlreadyRead {
 		var signature [4]byte
 		if _, err := io.ReadFull(cz.br, signature[:]); err != nil {
-			if err == io.EOF {
-				cz.err = io.ErrUnexpectedEOF
-			} else {
-				cz.err = err
-			}
-			return false
+			return err
 		}
 		if bytes.Equal(signature[:], sigCentralDirectoryHeader) {
-			cz.err = io.EOF
-			return false
+			return io.EOF
 		}
 		if !bytes.Equal(signature[:], sigLocalFileHeader) {
-			cz.err = ErrLocalFileHeaderSignatureNotFound
-			return false
+			return ErrLocalFileHeaderSignatureNotFound
 		}
 	}
 
 	if err := binary.Read(cz.br, binary.LittleEndian, &cz.header); err != nil {
-		if err == io.EOF {
-			cz.err = io.ErrUnexpectedEOF
-		} else {
-			cz.err = err
-		}
-		return false
+		return err
 	}
 	cz.OriginalSize = func() uint64 { return uint64(cz.header.UncompressedSize) }
 	cz.CompressedSize = func() uint64 { return uint64(cz.header.CompressedSize) }
@@ -420,13 +400,11 @@ func (cz *CorruptedZip) Scan() bool {
 	cz.hasNextEntry = func() bool { return true }
 
 	if err := cz.readFilenameField(); err != nil {
-		cz.err = err
-		return false
+		return err
 	}
 
 	if err := cz.readExtendField(); err != nil {
-		cz.err = err
-		return false
+		return err
 	}
 
 	cz.Debug("LocalFileHeader.CompressSize:", cz.header.CompressedSize)
@@ -436,8 +414,7 @@ func (cz *CorruptedZip) Scan() bool {
 		if (cz.header.Bits & bitDataDescriptorUsed) != 0 {
 			hasNextEntry, _, err := seekToSignature(cz.br, io.Discard, cz.Debug)
 			if err != nil {
-				cz.err = err
-				return false
+				return err
 			}
 			cz.hasNextEntry = func() bool { return hasNextEntry }
 			cz.nextSignatureAlreadyRead = true
@@ -447,12 +424,11 @@ func (cz *CorruptedZip) Scan() bool {
 				panic("directory: " + cz.name + ":compress size is larget than math.MaxInt")
 			}
 			if _, err := cz.br.Discard(int(size)); err != nil {
-				cz.err = err
-				return false
+				return err
 			}
 			cz.nextSignatureAlreadyRead = false
 		}
-		return true
+		return nil
 	}
 
 	var rawDataSource io.Reader
@@ -481,12 +457,12 @@ func (cz *CorruptedZip) Scan() bool {
 
 		pipeR, pipeW := io.Pipe()
 		cz.closers = append(cz.closers, pipeR)
+		cz.nextSignatureAlreadyRead = true
 		rawDataSource = pipeR
 
 		go func() {
 			hasNextEntry, dataDescriptor, err := seekToSignature(cz.br, pipeW, cz.Debug)
 			pipeW.Close()
-			cz.nextSignatureAlreadyRead = true
 			c <- readResult{
 				_DataDescriptor: dataDescriptor,
 				hasNextEntry:    hasNextEntry,
@@ -500,8 +476,7 @@ func (cz *CorruptedZip) Scan() bool {
 	}
 	if (cz.header.Bits & bitEncrypted) != 0 {
 		if !cz.passwordHolder.Ready() {
-			cz.err = &ErrPassword{name: cz.name}
-			return false
+			return &ErrPassword{name: cz.name}
 		}
 		// Use cz.header.ModifiedTime instead of CRC32.
 		// The reason is unknown.
@@ -511,9 +486,19 @@ func (cz *CorruptedZip) Scan() bool {
 		zr := f(rawDataSource)
 		cz.body = zr
 		cz.closers = append(cz.closers, zr)
-		return true
+		return nil
 	} else {
-		cz.err = fmt.Errorf("Compression Method(%d) is not supported", cz.header.Method)
-		return false
+		return fmt.Errorf("Compression Method(%d) is not supported", cz.header.Method)
 	}
+}
+
+// Scan advances the CorruptedZip to the next single file in a ZIP archive.
+func (cz *CorruptedZip) Scan() bool {
+	err := cz.scan()
+	if err == io.EOF {
+		cz.err = nil // means no error
+	} else {
+		cz.err = err
+	}
+	return err == nil
 }
