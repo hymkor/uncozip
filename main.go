@@ -87,7 +87,6 @@ var (
 )
 
 var (
-	ErrTooNearEOF                       = errors.New("Too near EOF")
 	ErrLocalFileHeaderSignatureNotFound = errors.New("Signature not found")
 )
 
@@ -281,7 +280,7 @@ func (cz *CorruptedZip) Scan() bool {
 		var signature [4]byte
 		if _, err := io.ReadFull(br, signature[:]); err != nil {
 			if err == io.EOF {
-				cz.err = ErrTooNearEOF
+				cz.err = io.ErrUnexpectedEOF
 			} else {
 				cz.err = err
 			}
@@ -299,7 +298,7 @@ func (cz *CorruptedZip) Scan() bool {
 
 	if err := binary.Read(br, binary.LittleEndian, &cz.header); err != nil {
 		if err == io.EOF {
-			cz.err = ErrTooNearEOF
+			cz.err = io.ErrUnexpectedEOF
 		} else {
 			cz.err = err
 		}
@@ -309,7 +308,7 @@ func (cz *CorruptedZip) Scan() bool {
 
 	if _, err := io.ReadFull(br, name[:]); err != nil {
 		if err == io.EOF {
-			cz.err = ErrTooNearEOF
+			cz.err = io.ErrUnexpectedEOF
 		} else {
 			cz.err = err
 		}
@@ -384,7 +383,7 @@ func (cz *CorruptedZip) Scan() bool {
 		if left > 0 {
 			if _, err := br.Discard(int(left)); err != nil {
 				if err == io.EOF {
-					cz.err = ErrTooNearEOF
+					cz.err = io.ErrUnexpectedEOF
 				} else {
 					cz.err = err
 				}
