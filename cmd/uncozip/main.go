@@ -93,9 +93,9 @@ func extractEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 		return 0, err
 	}
 	switch cz.Method() {
-	case uncozip.Deflated:
+	case uncozip.Deflate:
 		fmt.Fprintln(os.Stderr, "  inflating:", fname)
-	case uncozip.NotCompressed:
+	case uncozip.Store:
 		fmt.Fprintln(os.Stderr, " extracting:", fname)
 	}
 	fd, err := os.Create(fname)

@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	NotCompressed = 0
-	Deflated      = 8
+	Store   = 0
+	Deflate = 8
 
 	bitEncrypted          = 1 << 0
 	bitDataDescriptorUsed = 1 << 3
@@ -29,6 +29,11 @@ const (
 	sigSize            = 4
 	dataDescriptorSize = 4 * 3
 )
+
+var decompressors = map[uint16]func(io.Reader) io.ReadCloser{
+	Store:   io.NopCloser,
+	Deflate: flate.NewReader,
+}
 
 type _LocalFileHeader struct {
 	RequiredVersion  uint16
@@ -502,16 +507,12 @@ func (cz *CorruptedZip) Scan() bool {
 		// The reason is unknown.
 		rawDataSource = transform.NewReader(rawDataSource, newDecrypter(cz.name, &cz.passwordHolder, cz.header.ModifiedTime))
 	}
-	switch cz.header.Method {
-	case Deflated:
-		zr := flate.NewReader(rawDataSource)
+	if f, ok := decompressors[cz.header.Method]; ok {
+		zr := f(rawDataSource)
 		cz.body = zr
 		cz.closers = append(cz.closers, zr)
 		return true
-	case NotCompressed:
-		cz.body = rawDataSource
-		return true
-	default:
+	} else {
 		cz.err = fmt.Errorf("Compression Method(%d) is not supported", cz.header.Method)
 		return false
 	}
