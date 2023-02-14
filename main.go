@@ -279,27 +279,23 @@ func New(r io.Reader) (*CorruptedZip, error) {
 	}, nil
 }
 
-func (cz *CorruptedZip) readFilenameField() error {
-	name := make([]byte, cz.header.FilenameLength)
+func readFilenameField(r io.Reader, n uint16, utf8 bool) (string, error) {
+	name := make([]byte, n)
 
-	if _, err := io.ReadFull(cz.br, name[:]); err != nil {
-		return err
+	if _, err := io.ReadFull(r, name[:]); err != nil {
+		return "", err
 	}
 	var fname string
-	if (cz.header.Bits & bitEncodedUTF8) != 0 {
+	if utf8 {
 		fname = string(name)
 	} else {
 		var err error
 		fname, err = mbcs.AtoU(name, mbcs.ACP)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
-	cz.Debug("LocalFileHeader Name:", fname)
-
-	fname = strings.TrimLeft(fname, "/")
-	cz.name = fname
-	return nil
+	return strings.TrimLeft(fname, "/"), nil
 }
 
 func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
@@ -351,7 +347,7 @@ func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
 	return nil
 }
 
-func (cz *CorruptedZip) scan() error {
+func (cz *CorruptedZip) scan() (err error) {
 	for _, c := range cz.closers {
 		c.Close()
 	}
@@ -386,9 +382,11 @@ func (cz *CorruptedZip) scan() error {
 	cz.bgErr = func() error { return nil }
 	cz.hasNextEntry = func() bool { return true }
 
-	if err := cz.readFilenameField(); err != nil {
+	cz.name, err = readFilenameField(cz.br, cz.header.FilenameLength, (cz.header.Bits&bitEncodedUTF8) != 0)
+	if err != nil {
 		return err
 	}
+	cz.Debug("LocalFileHeader Name:", cz.name)
 
 	if err := readExtendField(cz.br, cz.header.ExtendFieldSize, cz); err != nil {
 		return err
