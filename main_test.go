@@ -8,20 +8,20 @@ import (
 	"testing"
 )
 
+func noDebug(...any) (int, error) {
+	return 0, nil
+}
+
 func TestSeekToSignatureForLocalHeader(t *testing.T) {
 
 	var source bytes.Buffer
 	io.WriteString(&source, "HOGEHOGE")
-	dd := &DataDescriptor{CompressedSize: 8}
+	dd := &_DataDescriptor{CompressedSize: 8}
 	binary.Write(&source, binary.LittleEndian, dd)
 	io.WriteString(&source, "PK\x03\x04")
 
-	cz, err := New(&source)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
 	var output strings.Builder
-	cont, _, err := cz.seekToSignature(&output)
+	cont, _, err := seekToSignature(&source, &output, noDebug)
 	if err != nil {
 		t.Fatal(err.Error())
 		return
@@ -39,16 +39,12 @@ func TestSeekToSignatureForLocalHeader(t *testing.T) {
 func TestSeekToSignatureForCentralDirectoryHeader(t *testing.T) {
 	var source bytes.Buffer
 	io.WriteString(&source, "HOGEHOGE")
-	dd := &DataDescriptor{CompressedSize: 8}
+	dd := &_DataDescriptor{CompressedSize: 8}
 	binary.Write(&source, binary.LittleEndian, dd)
 	io.WriteString(&source, "PK\x01\x02")
 
-	cz, err := New(&source)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
 	var output strings.Builder
-	cont, _, err := cz.seekToSignature(&output)
+	cont, _, err := seekToSignature(&source, &output, noDebug)
 	if err != nil {
 		t.Fatal(err.Error())
 		return
