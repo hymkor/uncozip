@@ -122,7 +122,7 @@ func mainForReader(r io.Reader, patterns []string) error {
 	if err != nil {
 		return err
 	}
-	cz.SetPasswordGetter(askPassword)
+	cz.RegisterPasswordHandler(askPassword)
 	if *flagDebug {
 		cz.Debug = func(args ...any) (int, error) {
 			return fmt.Fprintln(os.Stderr, args...)
