@@ -302,6 +302,25 @@ func readFilenameField(r io.Reader, n uint16, utf8 bool) (string, error) {
 	return strings.TrimLeft(fname, "/"), nil
 }
 
+func readZIP64(r io.Reader, cz *CorruptedZip) error {
+	var origSize uint64
+	err := binary.Read(r, binary.LittleEndian, &origSize)
+	if err != nil {
+		return fmt.Errorf("ZIP64 Header: originalSize field broken: %w", err)
+	}
+	cz.OriginalSize = func() uint64 { return origSize }
+
+	cz.Debug("  ExtendField: ZIP64.OriginalSize:", origSize)
+	var compSize uint64
+	err = binary.Read(r, binary.LittleEndian, &compSize)
+	if err != nil {
+		return fmt.Errorf("ZIP64 Header: compressSize field broken: %w", err)
+	}
+	cz.CompressedSize = func() uint64 { return compSize }
+	cz.Debug("  ExtendField: ZIP64.CompressSize:", compSize)
+	return nil
+}
+
 func readAsSecondsSince1970(r io.Reader) (tm time.Time, err error) {
 	var secondsSince1970 uint32
 	err = binary.Read(r, binary.LittleEndian, &secondsSince1970)
@@ -312,18 +331,60 @@ func readAsSecondsSince1970(r io.Reader) (tm time.Time, err error) {
 	return
 }
 
+func readTimeStamp(r io.Reader, cz *CorruptedZip) error {
+	var bitflag [1]byte
+	err := binary.Read(r, binary.LittleEndian, &bitflag)
+	if err != nil {
+		return fmt.Errorf("Extended FileStamp bit field can not read: %w", err)
+	}
+	if (bitflag[0] & 1) != 0 {
+		cz.LastModificationTime, err = readAsSecondsSince1970(r)
+		if err != nil {
+			return fmt.Errorf("Last Modified DateTime: %w", err)
+		}
+		cz.Debug("  Last Modification Time:", cz.LastModificationTime)
+	}
+	if (bitflag[0] & 2) != 0 {
+		cz.LastAccessTime, err = readAsSecondsSince1970(r)
+		if err != nil {
+			return fmt.Errorf("Last Access DateTime: %w", err)
+		}
+		cz.Debug("  Last Access Time:", cz.LastAccessTime)
+	}
+	if (bitflag[0] & 4) != 0 {
+		cz.CreationTime, err = readAsSecondsSince1970(r)
+		if err != nil {
+			return fmt.Errorf("Creation Time: %w", err)
+		}
+		cz.Debug("  Create Time:", cz.CreationTime)
+	}
+	return nil
+}
+
+func readWinACL(r io.Reader, cz *CorruptedZip) error {
+	cz.Debug("  Ignore: Windows NT security descriptor (binary ACL)")
+	return nil
+}
+
+const (
+	idZIP64  = 0x0001
+	idWinACL = 0x4453
+	idStamp  = 0x5455
+)
+
+var extendFieldFunc = map[uint16]func(r io.Reader, cz *CorruptedZip) error{
+	idZIP64:  readZIP64,
+	idStamp:  readTimeStamp,
+	idWinACL: readWinACL,
+}
+
 func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
-	const (
-		idZIP64  = 0x0001
-		idWinACL = 0x4453
-		idStamp  = 0x5455
-	)
 	cz.Debug("ExtendFieldSize:", n)
 	if n <= 0 {
 		return
 	}
 	lr := &io.LimitedReader{R: r, N: int64(n)}
-	for lr.N > 8 {
+	for lr.N >= 4 {
 		var header struct {
 			ID   uint16
 			Size uint16
@@ -334,53 +395,11 @@ func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
 		cz.Debug("ExtendField: ID:", header.ID, "Size:", header.Size)
 
 		llr := &io.LimitedReader{R: lr, N: int64(header.Size)}
-		switch header.ID {
-		case idZIP64:
-			var origSize uint64
-			err = binary.Read(llr, binary.LittleEndian, &origSize)
-			if err != nil {
-				return fmt.Errorf("ZIP64 Header: originalSize field broken: %w", err)
+		if f, ok := extendFieldFunc[header.ID]; ok {
+			if err := f(llr, cz); err != nil {
+				return err
 			}
-			cz.OriginalSize = func() uint64 { return origSize }
-
-			cz.Debug("  ExtendField: ZIP64.OriginalSize:", origSize)
-			var compSize uint64
-			err = binary.Read(llr, binary.LittleEndian, &compSize)
-			if err != nil {
-				return fmt.Errorf("ZIP64 Header: compressSize field broken: %w", err)
-			}
-			cz.CompressedSize = func() uint64 { return compSize }
-			cz.Debug("  ExtendField: ZIP64.CompressSize:", compSize)
-		case idStamp:
-			var bitflag [1]byte
-			err = binary.Read(llr, binary.LittleEndian, &bitflag)
-			if err != nil {
-				return fmt.Errorf("Extended FileStamp bit field can not read: %w", err)
-			}
-			if (bitflag[0] & 1) != 0 {
-				cz.LastModificationTime, err = readAsSecondsSince1970(llr)
-				if err != nil {
-					return fmt.Errorf("Last Modified DateTime: %w", err)
-				}
-				cz.Debug("  Last Modification Time:", cz.LastModificationTime)
-			}
-			if (bitflag[0] & 2) != 0 {
-				cz.LastAccessTime, err = readAsSecondsSince1970(llr)
-				if err != nil {
-					return fmt.Errorf("Last Access DateTime: %w", err)
-				}
-				cz.Debug("  Last Access Time:", cz.LastAccessTime)
-			}
-			if (bitflag[0] & 4) != 0 {
-				cz.CreationTime, err = readAsSecondsSince1970(llr)
-				if err != nil {
-					return fmt.Errorf("Creation Time: %w", err)
-				}
-				cz.Debug("  Create Time:", cz.CreationTime)
-			}
-		case idWinACL:
-			cz.Debug("  Ignore: Windows NT security descriptor (binary ACL)")
-		default:
+		} else {
 			cz.Debug("  Unknown extended field")
 		}
 		if llr.N > 0 {
