@@ -67,16 +67,23 @@ func unpackBits(source uint64, bits ...int) []int {
 	return result
 }
 
-// Time returns Hour, Minute, and Second of Modificated time.
-func (h *_LocalFileHeader) Time() (int, int, int) {
+// time returns Hour, Minute, and Second of Modificated time.
+func (h *_LocalFileHeader) time() (int, int, int) {
 	tm := unpackBits(uint64(h.ModifiedTime), bitSecond, bitMin, bitHour)
 	return tm[2], tm[1], tm[0] * 2
 }
 
-// Date returns Year, Month, and Day of Modified date.
-func (h *_LocalFileHeader) Date() (int, int, int) {
+// date returns Year, Month, and Day of Modified date.
+func (h *_LocalFileHeader) date() (int, int, int) {
 	dt := unpackBits(uint64(h.ModifiedDate), bitDay, bitMonth, bitYear)
 	return 1980 + dt[2], dt[1], dt[0]
+}
+
+// stamp returns the modificated time of the most recent file by a call to Scan.
+func (h *_LocalFileHeader) stamp() time.Time {
+	hour, min, second := h.time()
+	year, month, day := h.date()
+	return time.Date(year, time.Month(month), day, hour, min, second, 0, time.Local)
 }
 
 type _DataDescriptor struct {
@@ -221,6 +228,10 @@ type CorruptedZip struct {
 	err                      error
 	nextSignatureAlreadyRead bool
 
+	LastModificationTime time.Time
+	LastAccessTime       time.Time
+	CreationTime         time.Time
+
 	OriginalSize   func() uint64
 	CompressedSize func() uint64
 	CRC32          func() uint32
@@ -261,13 +272,6 @@ func (cz *CorruptedZip) Body() io.Reader {
 	return cz.body
 }
 
-// Stamp returns the modificated time of the most recent file by a call to Scan.
-func (cz *CorruptedZip) Stamp() time.Time {
-	hour, min, second := cz.header.Time()
-	year, month, day := cz.header.Date()
-	return time.Date(year, time.Month(month), day, hour, min, second, 0, time.Local)
-}
-
 // New returns a CorruptedZip instance that reads a ZIP archive.
 func New(r io.Reader) (*CorruptedZip, error) {
 	return &CorruptedZip{
@@ -296,6 +300,16 @@ func readFilenameField(r io.Reader, n uint16, utf8 bool) (string, error) {
 		}
 	}
 	return strings.TrimLeft(fname, "/"), nil
+}
+
+func readAsSecondsSince1970(r io.Reader) (tm time.Time, err error) {
+	var secondsSince1970 uint32
+	err = binary.Read(r, binary.LittleEndian, &secondsSince1970)
+	if err != nil {
+		return
+	}
+	tm = time.Unix(int64(secondsSince1970), 0)
+	return
 }
 
 func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
@@ -336,6 +350,33 @@ func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
 			}
 			cz.CompressedSize = func() uint64 { return compSize }
 			cz.Debug("ExtendField: ZIP64.CompressSize:", compSize)
+		case idStamp:
+			var bitflag [1]byte
+			err = binary.Read(llr, binary.LittleEndian, &bitflag)
+			if err != nil {
+				return fmt.Errorf("Extended FileStamp bit field can not read: %w", err)
+			}
+			if (bitflag[0] & 1) != 0 {
+				cz.LastModificationTime, err = readAsSecondsSince1970(llr)
+				if err != nil {
+					return fmt.Errorf("Last Modified DateTime: %w", err)
+				}
+				cz.Debug("Last Modification Time:", cz.LastModificationTime)
+			}
+			if (bitflag[0] & 2) != 0 {
+				cz.LastAccessTime, err = readAsSecondsSince1970(llr)
+				if err != nil {
+					return fmt.Errorf("Last Access DateTime: %w", err)
+				}
+				cz.Debug("Last Access Time:", cz.LastAccessTime)
+			}
+			if (bitflag[0] & 4) != 0 {
+				cz.CreationTime, err = readAsSecondsSince1970(llr)
+				if err != nil {
+					return fmt.Errorf("Creation Time: %w", err)
+				}
+				cz.Debug("Create Time:", cz.CreationTime)
+			}
 		}
 		if llr.N > 0 {
 			io.Copy(io.Discard, llr)
@@ -381,6 +422,10 @@ func (cz *CorruptedZip) scan() (err error) {
 	cz.CRC32 = func() uint32 { return cz.header.CRC32 }
 	cz.bgErr = func() error { return nil }
 	cz.hasNextEntry = func() bool { return true }
+	cz.CreationTime = cz.header.stamp()
+	cz.LastModificationTime = cz.header.stamp()
+	cz.LastAccessTime = cz.header.stamp()
+	cz.Debug("LocalFileHeader.ModificatedDate/Time(DOS) :", cz.LastModificationTime)
 
 	cz.name, err = readFilenameField(cz.br, cz.header.FilenameLength, (cz.header.Bits&bitEncodedUTF8) != 0)
 	if err != nil {

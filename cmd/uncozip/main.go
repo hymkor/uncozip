@@ -73,7 +73,7 @@ func testEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 	}
 	fmt.Fprintf(os.Stderr, "%9d %s %s\n",
 		cz.OriginalSize(),
-		cz.Stamp().Format("2006/01/02 15:04:05"),
+		cz.LastModificationTime.Format("2006/01/02 15:04:05"),
 		cz.Name())
 	return h.Sum32(), nil
 }
@@ -111,8 +111,7 @@ func extractEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 	if err1 != nil {
 		return 0, err1
 	}
-	stamp := cz.Stamp()
-	if err := os.Chtimes(fname, stamp, stamp); err != nil {
+	if err := os.Chtimes(fname, cz.LastAccessTime, cz.LastModificationTime); err != nil {
 		fmt.Fprintln(os.Stderr, fname, err.Error())
 	}
 	return h.Sum32(), nil
