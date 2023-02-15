@@ -314,10 +314,11 @@ func readAsSecondsSince1970(r io.Reader) (tm time.Time, err error) {
 
 func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
 	const (
-		idZIP64 = 0x0001
-		idStamp = 0x5455
+		idZIP64  = 0x0001
+		idWinACL = 0x4453
+		idStamp  = 0x5455
 	)
-	cz.Debug("LocalFileHeader.ExtendFieldSize:", n)
+	cz.Debug("ExtendFieldSize:", n)
 	if n <= 0 {
 		return
 	}
@@ -342,14 +343,14 @@ func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
 			}
 			cz.OriginalSize = func() uint64 { return origSize }
 
-			cz.Debug("ExtendField: ZIP64.OriginalSize:", origSize)
+			cz.Debug("  ExtendField: ZIP64.OriginalSize:", origSize)
 			var compSize uint64
 			err = binary.Read(llr, binary.LittleEndian, &compSize)
 			if err != nil {
 				return fmt.Errorf("ZIP64 Header: compressSize field broken: %w", err)
 			}
 			cz.CompressedSize = func() uint64 { return compSize }
-			cz.Debug("ExtendField: ZIP64.CompressSize:", compSize)
+			cz.Debug("  ExtendField: ZIP64.CompressSize:", compSize)
 		case idStamp:
 			var bitflag [1]byte
 			err = binary.Read(llr, binary.LittleEndian, &bitflag)
@@ -361,22 +362,26 @@ func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
 				if err != nil {
 					return fmt.Errorf("Last Modified DateTime: %w", err)
 				}
-				cz.Debug("Last Modification Time:", cz.LastModificationTime)
+				cz.Debug("  Last Modification Time:", cz.LastModificationTime)
 			}
 			if (bitflag[0] & 2) != 0 {
 				cz.LastAccessTime, err = readAsSecondsSince1970(llr)
 				if err != nil {
 					return fmt.Errorf("Last Access DateTime: %w", err)
 				}
-				cz.Debug("Last Access Time:", cz.LastAccessTime)
+				cz.Debug("  Last Access Time:", cz.LastAccessTime)
 			}
 			if (bitflag[0] & 4) != 0 {
 				cz.CreationTime, err = readAsSecondsSince1970(llr)
 				if err != nil {
 					return fmt.Errorf("Creation Time: %w", err)
 				}
-				cz.Debug("Create Time:", cz.CreationTime)
+				cz.Debug("  Create Time:", cz.CreationTime)
 			}
+		case idWinACL:
+			cz.Debug("  Ignore: Windows NT security descriptor (binary ACL)")
+		default:
+			cz.Debug("  Unknown extended field")
 		}
 		if llr.N > 0 {
 			io.Copy(io.Discard, llr)
@@ -425,20 +430,21 @@ func (cz *CorruptedZip) scan() (err error) {
 	cz.CreationTime = cz.header.stamp()
 	cz.LastModificationTime = cz.header.stamp()
 	cz.LastAccessTime = cz.header.stamp()
-	cz.Debug("LocalFileHeader.ModificatedDate/Time(DOS) :", cz.LastModificationTime)
+	cz.Debug("LocalFileHeader")
+	cz.Debug("  ModificatedDate/Time(DOS) :", cz.LastModificationTime)
+	cz.Debug("  CompressSize:", cz.header.CompressedSize)
+	cz.Debug("  UncompressedSize:", cz.header.UncompressedSize)
 
 	cz.name, err = readFilenameField(cz.br, cz.header.FilenameLength, (cz.header.Bits&bitEncodedUTF8) != 0)
 	if err != nil {
 		return err
 	}
-	cz.Debug("LocalFileHeader Name:", cz.name)
+	cz.Debug("  Name:", cz.name)
 
 	if err := readExtendField(cz.br, cz.header.ExtendFieldSize, cz); err != nil {
 		return err
 	}
 
-	cz.Debug("LocalFileHeader.CompressSize:", cz.header.CompressedSize)
-	cz.Debug("LocalFileHeader.UncompressedSize:", cz.header.UncompressedSize)
 	isDir := len(cz.name) > 0 && cz.name[len(cz.name)-1] == '/'
 	if isDir {
 		if (cz.header.Bits & bitDataDescriptorUsed) != 0 {
