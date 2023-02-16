@@ -1,4 +1,8 @@
-- On Linux, fixed the error `unsupported OS` when filename was not encoded as UTF8.
+v0.6.1
+======
+Feb 16, 2023
+
+- **On Linux: Fix: the error `Unsupported OS` occured when the UTF8-flag for filename was not set**
 - With -debug, show the extra field:
     - ID=0x7875: Info-ZIP UNIX (newer UID/GID)
     - ID=0x4453: Windows NT security descriptor (binary ACL)
