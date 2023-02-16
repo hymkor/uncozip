@@ -1,3 +1,5 @@
+- On Linux, fix the error `unsupported OS`
+
 v0.6.0
 ======
 Feb 16, 2023
