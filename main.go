@@ -366,6 +366,22 @@ func readTimeStamp(r io.Reader, cz *CorruptedZip) error {
 
 func readWinACL(r io.Reader, cz *CorruptedZip) error {
 	cz.Debug("  Ignore: Windows NT security descriptor (binary ACL)")
+	var data struct {
+		BSize   uint16
+		Version byte
+		CType   uint16
+		EACRC   uint32
+	}
+	if err := binary.Read(r, binary.LittleEndian, &data); err != nil {
+		return err
+	}
+	cz.Debug("  Version:", data.BSize)
+	cz.Debug("  CType:", data.CType)
+	cz.Debug("  EACRC:", data.EACRC)
+	var buffer bytes.Buffer
+	if _, err := io.Copy(&buffer, r); err == nil {
+		cz.Debug("  compressed SD data:", buffer.Bytes())
+	}
 	return nil
 }
 
