@@ -369,16 +369,45 @@ func readWinACL(r io.Reader, cz *CorruptedZip) error {
 	return nil
 }
 
+func readNewUnixExtraField(r io.Reader, cz *CorruptedZip) error {
+	cz.Debug("  Ignore: New Unix Extra Field")
+	var versionAndUidSize [2]byte
+	if _, err := io.ReadFull(r, versionAndUidSize[:]); err != nil {
+		return err
+	}
+	cz.Debug("  Version:", versionAndUidSize[0])
+
+	uid := make([]byte, versionAndUidSize[1])
+	if _, err := io.ReadFull(r, uid[:]); err != nil {
+		return err
+	}
+	cz.Debug("  UID:", uid)
+
+	var gidSize [1]byte
+	if _, err := io.ReadFull(r, gidSize[:]); err != nil {
+		return err
+	}
+
+	gid := make([]byte, gidSize[0])
+	if _, err := io.ReadFull(r, gid[:]); err != nil {
+		return err
+	}
+	cz.Debug("  GID:", uid)
+	return nil
+}
+
 const (
-	idZIP64  = 0x0001
-	idWinACL = 0x4453
-	idStamp  = 0x5455
+	idZIP64   = 0x0001
+	idWinACL  = 0x4453
+	idStamp   = 0x5455
+	idNewUnix = 0x7875
 )
 
 var extendFieldFunc = map[uint16]func(r io.Reader, cz *CorruptedZip) error{
-	idZIP64:  readZIP64,
-	idStamp:  readTimeStamp,
-	idWinACL: readWinACL,
+	idZIP64:   readZIP64,
+	idStamp:   readTimeStamp,
+	idWinACL:  readWinACL,
+	idNewUnix: readNewUnixExtraField,
 }
 
 func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
