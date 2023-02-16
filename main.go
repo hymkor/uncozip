@@ -296,7 +296,10 @@ func readFilenameField(r io.Reader, n uint16, utf8 bool) (string, error) {
 		var err error
 		fname, err = mbcs.AtoU(name, mbcs.ACP)
 		if err != nil {
-			return "", err
+			if err != mbcs.ErrUnsupportedOs {
+				return "", err
+			}
+			fname = string(name)
 		}
 	}
 	return strings.TrimLeft(fname, "/"), nil
