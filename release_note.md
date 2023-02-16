@@ -1,3 +1,7 @@
+v0.6.0
+======
+Feb 16, 2023
+
 - Support: Extended timestamp field
     - Reflect the last update date and time and the last access date and time in 1 second units considering the timezone.
 
