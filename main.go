@@ -237,6 +237,7 @@ type CorruptedZip struct {
 	CRC32          func() uint32
 	hasNextEntry   func() bool
 	bgErr          func() error
+	FnameDecoder   transform.Transformer
 
 	header         _LocalFileHeader
 	passwordHolder _PasswordHolder
@@ -283,7 +284,7 @@ func New(r io.Reader) (*CorruptedZip, error) {
 	}, nil
 }
 
-func readFilenameField(r io.Reader, n uint16, utf8 bool) (string, error) {
+func readFilenameField(r io.Reader, n uint16, utf8 bool, decoder transform.Transformer) (string, error) {
 	name := make([]byte, n)
 
 	if _, err := io.ReadFull(r, name[:]); err != nil {
@@ -292,9 +293,16 @@ func readFilenameField(r io.Reader, n uint16, utf8 bool) (string, error) {
 	var fname string
 	if utf8 {
 		fname = string(name)
+	} else if decoder != nil {
+		var err error
+		name, _, err = transform.Bytes(decoder, name)
+		if err != nil {
+			return "", err
+		}
+		fname = string(name)
 	} else {
 		var err error
-		fname, err = mbcs.AtoU(name, mbcs.ACP)
+		fname, err = mbcs.AnsiToUtf8(name, mbcs.ACP)
 		if err != nil {
 			if err != mbcs.ErrUnsupportedOs {
 				return "", err
@@ -502,7 +510,7 @@ func (cz *CorruptedZip) scan() (err error) {
 	cz.Debug("  CompressSize:", cz.header.CompressedSize)
 	cz.Debug("  UncompressedSize:", cz.header.UncompressedSize)
 
-	cz.name, err = readFilenameField(cz.br, cz.header.FilenameLength, (cz.header.Bits&bitEncodedUTF8) != 0)
+	cz.name, err = readFilenameField(cz.br, cz.header.FilenameLength, (cz.header.Bits&bitEncodedUTF8) != 0, cz.FnameDecoder)
 	if err != nil {
 		return err
 	}

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"golang.org/x/term"
+	"golang.org/x/text/encoding/ianaindex"
 
 	"github.com/mattn/go-tty"
 
@@ -22,6 +23,7 @@ var (
 	flagTest   = flag.Bool("t", false, "Test CRC32")
 	flagExDir  = flag.String("d", "", "the directory where to extract")
 	flagStrict = flag.Bool("strict", false, "quit immediately on CRC-Error")
+	flagDecode = flag.String("decode", "", "IANA-registered-name to decode filename")
 )
 
 func matchingPatterns(target string, patterns []string) bool {
@@ -128,6 +130,14 @@ func mainForReader(r io.Reader, patterns []string) error {
 			return fmt.Fprintln(os.Stderr, args...)
 		}
 	}
+	if *flagDecode != "" {
+		e, err := ianaindex.IANA.Encoding(*flagDecode)
+		if err != nil {
+			return err
+		}
+		cz.FnameDecoder = e.NewDecoder()
+	}
+
 	for cz.Scan() {
 		var err error
 		var checksum uint32
