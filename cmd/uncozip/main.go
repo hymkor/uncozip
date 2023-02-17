@@ -135,6 +135,9 @@ func mainForReader(r io.Reader, patterns []string) error {
 		if err != nil {
 			return err
 		}
+		if e == nil {
+			return fmt.Errorf("-debug \"%s\" not supported in golang.org/x/text/encoding/ianaindex", *flagDecode)
+		}
 		cz.FnameDecoder = e.NewDecoder()
 	}
 
