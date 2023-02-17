@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/mattn/go-tty v0.0.4
-	github.com/nyaosorg/go-windows-mbcs v0.3.1
+	github.com/nyaosorg/go-windows-mbcs v0.4.0
 	golang.org/x/term v0.4.0
 	golang.org/x/text v0.7.0
 )
