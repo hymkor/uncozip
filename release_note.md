@@ -1,3 +1,5 @@
+- Add new option `-decode` that specifes IANA-registered-name to decode filename when UTF8 flag is not set.
+
 v0.6.1
 ======
 Feb 16, 2023

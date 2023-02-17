@@ -23,6 +23,9 @@ uncozip {OPTIONS} < ZIPFILENAME
 * `-debug` Enable debug output
 * `-strict` quit immediately on CRC-Error
 * `-t` Test CRC32 only
+* `-decode IANA-NAME` specify [IANA-registered-name][iana] to decode filename when UTF8 flag is not set (for example: `-decode Shift_JIS`)
+
+[iana]: https://www.iana.org/assignments/character-sets/character-sets.xhtml
 
 Install
 -------
