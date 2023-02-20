@@ -1,3 +1,15 @@
+- Command
+    - Fix: error message:  
+        from `-debug \"%s\" not supported in golang.org/x/text/encoding/ianaindex`  
+        to `-decode \"%s\" not supported in golang.org/x/text/encoding/ianaindex"`
+    - Fix: `-C "dir"` did not work when zip-input is STDIN.
+- Package
+    - Add method: Close(), IsDir(), RegisterNameDecoder()
+    - Body() returns bytes.NewReader([]byte{}) for directories
+    - The package code skips unread area instead of caller code
+    - When file is skipped, do not call deflate function
+    - New() is removed error value from return ones because errors never occur there
+
 v0.7.0
 ======
 Feb 18, 2023
