@@ -120,6 +120,11 @@ func extractEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 }
 
 func mainForReader(r io.Reader, patterns []string) error {
+	if *flagExDir != "" {
+		if err := os.Chdir(*flagExDir); err != nil {
+			return err
+		}
+	}
 	cz, err := uncozip.New(r)
 	if err != nil {
 		return err
@@ -201,11 +206,6 @@ func mains(args []string) error {
 		}
 		fd, err = os.Open(fname + ".zip")
 		if err != nil {
-			return err
-		}
-	}
-	if *flagExDir != "" {
-		if err := os.Chdir(*flagExDir); err != nil {
 			return err
 		}
 	}
