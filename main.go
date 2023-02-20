@@ -468,11 +468,15 @@ func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
 	return nil
 }
 
-func (cz *CorruptedZip) scan() (err error) {
+func (cz *CorruptedZip) Close() {
 	for _, c := range cz.closers {
 		c.Close()
 	}
 	cz.closers = cz.closers[:0]
+}
+
+func (cz *CorruptedZip) scan() (err error) {
+	cz.Close()
 	if err := cz.bgErr(); err != nil {
 		return err
 	}
