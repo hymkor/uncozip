@@ -250,8 +250,8 @@ func (cz *CorruptedZip) Method() uint16 {
 	return cz.header.Method
 }
 
-// SetPasswordGetter sets a callback function to query password to an user.
-func (cz *CorruptedZip) RegisterPasswordHandler(f func(name string) ([]byte, error)) {
+// RegisterPasswordHandler sets a callback function to query password to an user.
+func (cz *CorruptedZip) RegisterPasswordHandler(f func(filename string) (password []byte, err error)) {
 	cz.passwordHolder.getter = f
 }
 
