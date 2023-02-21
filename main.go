@@ -237,7 +237,7 @@ type CorruptedZip struct {
 	CRC32          func() uint32
 	hasNextEntry   func() bool
 	bgErr          func() error
-	FnameDecoder   transform.Transformer
+	fnameDecoder   func([]byte) (string, error)
 
 	header         _LocalFileHeader
 	passwordHolder _PasswordHolder
@@ -253,6 +253,11 @@ func (cz *CorruptedZip) Method() uint16 {
 // RegisterPasswordHandler sets a callback function to query password to an user.
 func (cz *CorruptedZip) RegisterPasswordHandler(f func(filename string) (password []byte, err error)) {
 	cz.passwordHolder.getter = f
+}
+
+// RegisterNameDecoder sets callback function to translate nonUTF8 filename to UTF8
+func (cz *CorruptedZip) RegisterNameDecoder(f func([]byte) (string, error)) {
+	cz.fnameDecoder = f
 }
 
 // Name returns the name of the most recent file by a call to Scan.
@@ -286,6 +291,14 @@ func (cz *CorruptedZip) IsDir() bool {
 	return cz.rawFileData == nil
 }
 
+func defaultFNameDecoder(b []byte) (string, error) {
+	name, err := mbcs.AnsiToUtf8(b, mbcs.ACP)
+	if err == mbcs.ErrUnsupportedOs {
+		err = nil
+	}
+	return string(name), err
+}
+
 // New returns a CorruptedZip instance that reads a ZIP archive.
 func New(r io.Reader) (*CorruptedZip, error) {
 	return &CorruptedZip{
@@ -294,10 +307,11 @@ func New(r io.Reader) (*CorruptedZip, error) {
 		bgErr:        func() error { return nil },
 		hasNextEntry: func() bool { return true },
 		closers:      make([]func(), 0, 2),
+		fnameDecoder: defaultFNameDecoder,
 	}, nil
 }
 
-func readFilenameField(r io.Reader, n uint16, utf8 bool, decoder transform.Transformer) (string, error) {
+func readFilenameField(r io.Reader, n uint16, utf8 bool, decoder func([]byte) (string, error)) (string, error) {
 	name := make([]byte, n)
 
 	if _, err := io.ReadFull(r, name[:]); err != nil {
@@ -306,21 +320,11 @@ func readFilenameField(r io.Reader, n uint16, utf8 bool, decoder transform.Trans
 	var fname string
 	if utf8 {
 		fname = string(name)
-	} else if decoder != nil {
-		var err error
-		name, _, err = transform.Bytes(decoder, name)
-		if err != nil {
-			return "", err
-		}
-		fname = string(name)
 	} else {
 		var err error
-		fname, err = mbcs.AnsiToUtf8(name, mbcs.ACP)
+		fname, err = decoder(name)
 		if err != nil {
-			if err != mbcs.ErrUnsupportedOs {
-				return "", err
-			}
-			fname = string(name)
+			return fname, err
 		}
 	}
 	return strings.TrimLeft(fname, "/"), nil
@@ -527,7 +531,7 @@ func (cz *CorruptedZip) scan() (err error) {
 	cz.Debug("  CompressSize:", cz.header.CompressedSize)
 	cz.Debug("  UncompressedSize:", cz.header.UncompressedSize)
 
-	cz.name, err = readFilenameField(cz.br, cz.header.FilenameLength, (cz.header.Bits&bitEncodedUTF8) != 0, cz.FnameDecoder)
+	cz.name, err = readFilenameField(cz.br, cz.header.FilenameLength, (cz.header.Bits&bitEncodedUTF8) != 0, cz.fnameDecoder)
 	if err != nil {
 		return err
 	}

@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/term"
 	"golang.org/x/text/encoding/ianaindex"
+	"golang.org/x/text/transform"
 
 	"github.com/mattn/go-tty"
 
@@ -138,7 +139,14 @@ func mainForReader(r io.Reader, patterns []string) error {
 		if e == nil {
 			return fmt.Errorf("-decode \"%s\" not supported in golang.org/x/text/encoding/ianaindex", *flagDecode)
 		}
-		cz.FnameDecoder = e.NewDecoder()
+		decoder := e.NewDecoder()
+		cz.RegisterNameDecoder(func(b []byte) (string, error) {
+			result, _, err := transform.Bytes(decoder, b)
+			if err != nil {
+				return "", err
+			}
+			return string(result), nil
+		})
 	}
 
 	for cz.Scan() {
