@@ -270,6 +270,9 @@ func (cz *CorruptedZip) Err() error {
 
 // Body returns the reader of the most recent file by a call to Scan.
 func (cz *CorruptedZip) Body() io.Reader {
+	if cz.rawFileData == nil {
+		return bytes.NewReader([]byte{})
+	}
 	f, ok := decompressors[cz.header.Method]
 	if !ok {
 		return bytes.NewReader([]byte{})
