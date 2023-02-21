@@ -57,31 +57,29 @@ func askPassword(name string) ([]byte, error) {
 var errSkipEntry = errors.New("SKIP ENTRY")
 
 func testEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
-	rc := cz.Body()
-	if rc == nil {
-		// directory
-		fmt.Fprintf(os.Stderr, "SKIP: %s\n", cz.Name())
+	fname := cz.Name()
+	if cz.IsDir() {
+		fmt.Fprintf(os.Stderr, "SKIP: %s\n", fname)
 		return 0, errSkipEntry
 	}
-	if !matchingPatterns(cz.Name(), patterns) {
+	if !matchingPatterns(fname, patterns) {
 		return 0, errSkipEntry
 	}
 	h := crc32.NewIEEE()
-	_, err := io.Copy(h, rc)
+	_, err := io.Copy(h, cz.Body())
 	if err != nil {
 		return 0, err
 	}
 	fmt.Fprintf(os.Stderr, "%9d %s %s\n",
 		cz.OriginalSize(),
 		cz.LastModificationTime.Format("2006/01/02 15:04:05"),
-		cz.Name())
+		fname)
 	return h.Sum32(), nil
 }
 
 func extractEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 	fname := cz.Name()
-	rc := cz.Body()
-	if rc == nil {
+	if cz.IsDir() {
 		fmt.Fprintln(os.Stderr, "   creating:", fname)
 		if err := os.Mkdir(fname, 0644); err != nil && !os.IsExist(err) {
 			return 0, err
@@ -102,7 +100,7 @@ func extractEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 		return 0, err
 	}
 	h := crc32.NewIEEE()
-	_, err = io.Copy(fd, io.TeeReader(rc, h))
+	_, err = io.Copy(fd, io.TeeReader(cz.Body(), h))
 	err1 := fd.Close()
 	if err != nil {
 		return 0, err

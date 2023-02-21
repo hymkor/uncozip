@@ -273,6 +273,10 @@ func (cz *CorruptedZip) Body() io.Reader {
 	return cz.body
 }
 
+func (cz *CorruptedZip) IsDir() bool {
+	return cz.body == nil
+}
+
 // New returns a CorruptedZip instance that reads a ZIP archive.
 func New(r io.Reader) (*CorruptedZip, error) {
 	return &CorruptedZip{
