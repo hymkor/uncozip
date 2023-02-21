@@ -221,7 +221,7 @@ func (u *lazyReadResult) Value() *readResult {
 
 // CorruptedZip is a reader for a ZIP archive that reads from io.Reader instead of io.ReaderAt
 type CorruptedZip struct {
-	closers                  []io.Closer
+	closers                  []func()
 	br                       *bufio.Reader
 	name                     string
 	body                     io.Reader
@@ -280,7 +280,7 @@ func New(r io.Reader) (*CorruptedZip, error) {
 		Debug:        func(...any) (int, error) { return 0, nil },
 		bgErr:        func() error { return nil },
 		hasNextEntry: func() bool { return true },
-		closers:      make([]io.Closer, 0, 2),
+		closers:      make([]func(), 0, 2),
 	}, nil
 }
 
@@ -469,8 +469,8 @@ func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
 }
 
 func (cz *CorruptedZip) Close() {
-	for _, c := range cz.closers {
-		c.Close()
+	for i := len(cz.closers) - 1; i >= 0; i-- {
+		cz.closers[i]()
 	}
 	cz.closers = cz.closers[:0]
 }
@@ -571,7 +571,7 @@ func (cz *CorruptedZip) scan() (err error) {
 		}
 
 		pipeR, pipeW := io.Pipe()
-		cz.closers = append(cz.closers, pipeR)
+		cz.closers = append(cz.closers, func() { pipeR.Close() })
 		cz.nextSignatureAlreadyRead = true
 		rawDataSource = pipeR
 
@@ -600,7 +600,7 @@ func (cz *CorruptedZip) scan() (err error) {
 	if f, ok := decompressors[cz.header.Method]; ok {
 		zr := f(rawDataSource)
 		cz.body = zr
-		cz.closers = append(cz.closers, zr)
+		cz.closers = append(cz.closers, func() { zr.Close(); io.Copy(io.Discard, rawDataSource) })
 		return nil
 	} else {
 		return fmt.Errorf("Compression Method(%d) is not supported", cz.header.Method)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"hash/crc32"
@@ -53,20 +54,17 @@ func askPassword(name string) ([]byte, error) {
 	return []byte(passwordString), nil
 }
 
+var errSkipEntry = errors.New("SKIP ENTRY")
+
 func testEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 	rc := cz.Body()
 	if rc == nil {
 		// directory
 		fmt.Fprintf(os.Stderr, "SKIP: %s\n", cz.Name())
-		return 0, nil
+		return 0, errSkipEntry
 	}
 	if !matchingPatterns(cz.Name(), patterns) {
-		// not specified
-		_, err := io.Copy(io.Discard, rc)
-		if err != nil {
-			return 0, err
-		}
-		return 0, nil
+		return 0, errSkipEntry
 	}
 	h := crc32.NewIEEE()
 	_, err := io.Copy(h, rc)
@@ -91,8 +89,7 @@ func extractEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 		return 0, nil
 	}
 	if !matchingPatterns(fname, patterns) {
-		_, err := io.Copy(io.Discard, rc)
-		return 0, err
+		return 0, errSkipEntry
 	}
 	switch cz.Method() {
 	case uncozip.Deflate:
@@ -153,6 +150,9 @@ func mainForReader(r io.Reader, patterns []string) error {
 			checksum, err = testEntry(cz, patterns)
 		} else {
 			checksum, err = extractEntry(cz, patterns)
+		}
+		if err == errSkipEntry {
+			continue
 		}
 		if err != nil {
 			return err
