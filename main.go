@@ -224,7 +224,7 @@ type CorruptedZip struct {
 	closers                  []func()
 	br                       *bufio.Reader
 	name                     string
-	body                     io.Reader
+	rawFileData              io.Reader
 	err                      error
 	nextSignatureAlreadyRead bool
 
@@ -270,11 +270,17 @@ func (cz *CorruptedZip) Err() error {
 
 // Body returns the reader of the most recent file by a call to Scan.
 func (cz *CorruptedZip) Body() io.Reader {
-	return cz.body
+	f, ok := decompressors[cz.header.Method]
+	if !ok {
+		return bytes.NewReader([]byte{})
+	}
+	r := f(cz.rawFileData)
+	cz.closers = append(cz.closers, func() { r.Close() })
+	return r
 }
 
 func (cz *CorruptedZip) IsDir() bool {
-	return cz.body == nil
+	return cz.rawFileData == nil
 }
 
 // New returns a CorruptedZip instance that reads a ZIP archive.
@@ -487,7 +493,7 @@ func (cz *CorruptedZip) scan() (err error) {
 	if !cz.hasNextEntry() {
 		return io.EOF
 	}
-	cz.body = nil
+	cz.rawFileData = nil
 
 	if !cz.nextSignatureAlreadyRead {
 		var signature [4]byte
@@ -550,8 +556,6 @@ func (cz *CorruptedZip) scan() (err error) {
 		return nil
 	}
 
-	var rawDataSource io.Reader
-
 	if (cz.header.Bits & bitDataDescriptorUsed) != 0 {
 		cz.Debug("LocalFileHeader.Bits: bitDataDescriptorUsed is set")
 
@@ -577,7 +581,7 @@ func (cz *CorruptedZip) scan() (err error) {
 		pipeR, pipeW := io.Pipe()
 		cz.closers = append(cz.closers, func() { pipeR.Close() })
 		cz.nextSignatureAlreadyRead = true
-		rawDataSource = pipeR
+		cz.rawFileData = pipeR
 
 		go func() {
 			hasNextEntry, dataDescriptor, err := seekToSignature(cz.br, pipeW, cz.Debug)
@@ -590,7 +594,7 @@ func (cz *CorruptedZip) scan() (err error) {
 		}()
 	} else {
 		cz.Debug("LocalFileHeader.Bits: bitDataDescriptorUsed is not set")
-		rawDataSource = &io.LimitedReader{R: cz.br, N: int64(cz.CompressedSize())}
+		cz.rawFileData = &io.LimitedReader{R: cz.br, N: int64(cz.CompressedSize())}
 		cz.nextSignatureAlreadyRead = false
 	}
 	if (cz.header.Bits & bitEncrypted) != 0 {
@@ -599,16 +603,13 @@ func (cz *CorruptedZip) scan() (err error) {
 		}
 		// Use cz.header.ModifiedTime instead of CRC32.
 		// The reason is unknown.
-		rawDataSource = transform.NewReader(rawDataSource, newDecrypter(cz.name, &cz.passwordHolder, cz.header.ModifiedTime))
+		cz.rawFileData = transform.NewReader(cz.rawFileData, newDecrypter(cz.name, &cz.passwordHolder, cz.header.ModifiedTime))
 	}
-	if f, ok := decompressors[cz.header.Method]; ok {
-		zr := f(rawDataSource)
-		cz.body = zr
-		cz.closers = append(cz.closers, func() { zr.Close(); io.Copy(io.Discard, rawDataSource) })
-		return nil
-	} else {
+	cz.closers = append(cz.closers, func() { io.Copy(io.Discard, cz.rawFileData) })
+	if _, ok := decompressors[cz.header.Method]; !ok {
 		return fmt.Errorf("Compression Method(%d) is not supported", cz.header.Method)
 	}
+	return nil
 }
 
 // Scan advances the CorruptedZip to the next single file in a ZIP archive.
