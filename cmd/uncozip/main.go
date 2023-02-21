@@ -121,10 +121,7 @@ func mainForReader(r io.Reader, patterns []string) error {
 			return err
 		}
 	}
-	cz, err := uncozip.New(r)
-	if err != nil {
-		return err
-	}
+	cz := uncozip.New(r)
 	cz.RegisterPasswordHandler(askPassword)
 	if *flagDebug {
 		cz.Debug = func(args ...any) (int, error) {

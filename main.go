@@ -300,7 +300,7 @@ func defaultFNameDecoder(b []byte) (string, error) {
 }
 
 // New returns a CorruptedZip instance that reads a ZIP archive.
-func New(r io.Reader) (*CorruptedZip, error) {
+func New(r io.Reader) *CorruptedZip {
 	return &CorruptedZip{
 		br:           bufio.NewReader(r),
 		Debug:        func(...any) (int, error) { return 0, nil },
@@ -308,7 +308,7 @@ func New(r io.Reader) (*CorruptedZip, error) {
 		hasNextEntry: func() bool { return true },
 		closers:      make([]func(), 0, 2),
 		fnameDecoder: defaultFNameDecoder,
-	}, nil
+	}
 }
 
 func readFilenameField(r io.Reader, n uint16, utf8 bool, decoder func([]byte) (string, error)) (string, error) {
