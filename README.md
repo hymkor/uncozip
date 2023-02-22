@@ -8,6 +8,9 @@ This is the tool to UNzip COrrupted ZIP file that does not have the central dire
 Even when the archive is so large that `zip -FF Corrupted.zip --out New.zip` fails, sometimes uncozip succeeds.  
 ( For example, the case Corrupted.zip is larger than 4GB )
 
+The uncozip is also useful on non-Windows OSes to unpack archives with non-UTF8 filenames such as Shift_JIS.
+(`uncozip -decode Shift_JIS foo.zip`)
+
 Usage
 ----------
 
