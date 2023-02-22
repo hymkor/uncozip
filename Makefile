@@ -25,5 +25,7 @@ package:
 	$(SET) "GOOS=windows" && $(SET) "GOARCH=386"   && $(MAKE) _package
 	$(SET) "GOOS=windows" && $(SET) "GOARCH=amd64" && $(MAKE) _package
 
+release:
+	gh release create -d -t $(VERSION) $(VERSION) $(wildcard $(NAME)-$(VERSION)-*.zip)
 manifest:
 	make-scoop-manifest *-windows-*.zip > $(NAME).json
