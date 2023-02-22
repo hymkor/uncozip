@@ -237,7 +237,7 @@ type CorruptedZip struct {
 	// This field is sed by Scan method
 	OriginalSize func() uint64
 
-	// CompressedSize returns the current file's uncompressed size written in "local file header" or "data descriptor".
+	// CompressedSize returns the current file's compressed size written in "local file header" or "data descriptor".
 	// When an "data descriptor" exists, it waits until file data stream is read all.
 	// This field is sed by Scan method
 	CompressedSize func() uint64
