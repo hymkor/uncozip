@@ -232,20 +232,9 @@ type CorruptedZip struct {
 	LastAccessTime       time.Time
 	CreationTime         time.Time
 
-	// OriginalSize returns the current file's uncompressed size written in "local file header" or "data descriptor".
-	// When an "data descriptor" exists, it waits until file data stream is read all.
-	// This field is sed by Scan method
-	OriginalSize func() uint64
-
-	// CompressedSize returns the current file's compressed size written in "local file header" or "data descriptor".
-	// When an "data descriptor" exists, it waits until file data stream is read all.
-	// This field is sed by Scan method
-	CompressedSize func() uint64
-
-	// CRC32 returns the current file's CRC32 written in "local file header" or "data descriptor".
-	// When an "data descriptor" exists, it waits until file data stream is read all.
-	// This field is sed by Scan method
-	CRC32 func() uint32
+	originalSize   func() uint64
+	compressedSize func() uint64
+	crc32          func() uint32
 
 	hasNextEntry func() bool
 	bgErr        func() error
@@ -256,6 +245,27 @@ type CorruptedZip struct {
 
 	// Debug outputs debug-log. When the field is not set, debug-log is dropped.
 	Debug func(...any) (int, error)
+}
+
+// originalSize returns the current file's uncompressed size written in "local file header" or "data descriptor".
+// When an "data descriptor" exists, it waits until file data stream is read all.
+// This field is sed by Scan method
+func (cz *CorruptedZip) OriginalSize() uint64 {
+	return cz.originalSize()
+}
+
+// CompressedSize returns the current file's compressed size written in "local file header" or "data descriptor".
+// When an "data descriptor" exists, it waits until file data stream is read all.
+// This field is sed by Scan method
+func (cz *CorruptedZip) CompressedSize() uint64 {
+	return cz.compressedSize()
+}
+
+// CRC32 returns the current file's CRC32 written in "local file header" or "data descriptor".
+// When an "data descriptor" exists, it waits until file data stream is read all.
+// This field is sed by Scan method
+func (cz *CorruptedZip) CRC32() uint32 {
+	return cz.crc32()
 }
 
 // Method returns the mothod to compress the current entry data
@@ -350,7 +360,7 @@ func readZIP64(r io.Reader, cz *CorruptedZip) error {
 	if err != nil {
 		return fmt.Errorf("ZIP64 Header: originalSize field broken: %w", err)
 	}
-	cz.OriginalSize = func() uint64 { return origSize }
+	cz.originalSize = func() uint64 { return origSize }
 
 	cz.Debug("  ExtendField: ZIP64.OriginalSize:", origSize)
 	var compSize uint64
@@ -358,7 +368,7 @@ func readZIP64(r io.Reader, cz *CorruptedZip) error {
 	if err != nil {
 		return fmt.Errorf("ZIP64 Header: compressSize field broken: %w", err)
 	}
-	cz.CompressedSize = func() uint64 { return compSize }
+	cz.compressedSize = func() uint64 { return compSize }
 	cz.Debug("  ExtendField: ZIP64.CompressSize:", compSize)
 	return nil
 }
@@ -533,9 +543,9 @@ func (cz *CorruptedZip) scan() (err error) {
 	if err := binary.Read(cz.br, binary.LittleEndian, &cz.header); err != nil {
 		return err
 	}
-	cz.OriginalSize = func() uint64 { return uint64(cz.header.UncompressedSize) }
-	cz.CompressedSize = func() uint64 { return uint64(cz.header.CompressedSize) }
-	cz.CRC32 = func() uint32 { return cz.header.CRC32 }
+	cz.originalSize = func() uint64 { return uint64(cz.header.UncompressedSize) }
+	cz.compressedSize = func() uint64 { return uint64(cz.header.CompressedSize) }
+	cz.crc32 = func() uint32 { return cz.header.CRC32 }
 	cz.bgErr = func() error { return nil }
 	cz.hasNextEntry = func() bool { return true }
 	cz.CreationTime = cz.header.stamp()
@@ -584,13 +594,13 @@ func (cz *CorruptedZip) scan() (err error) {
 		c := make(chan readResult)
 
 		ch := &lazyReadResult{channel: c}
-		cz.OriginalSize = func() uint64 {
+		cz.originalSize = func() uint64 {
 			return uint64(ch.Value().UncompressedSize)
 		}
-		cz.CompressedSize = func() uint64 {
+		cz.compressedSize = func() uint64 {
 			return uint64(ch.Value().CompressedSize)
 		}
-		cz.CRC32 = func() uint32 {
+		cz.crc32 = func() uint32 {
 			return ch.Value().CRC32
 		}
 		cz.bgErr = func() error {
