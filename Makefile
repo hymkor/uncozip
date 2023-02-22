@@ -29,3 +29,8 @@ release:
 	gh release create -d -t $(VERSION) $(VERSION) $(wildcard $(NAME)-$(VERSION)-*.zip)
 manifest:
 	make-scoop-manifest *-windows-*.zip > $(NAME).json
+
+5GB.zip:
+	fsutil.exe file createnew 5GB-1 5000000000
+	fsutil.exe file createnew 5GB-2 5000000000
+	zip -m 5GB.zip 5GB-1 5GB-2
