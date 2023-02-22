@@ -1,16 +1,16 @@
 {
-    "version": "0.6.1",
+    "version": "0.7.1",
     "description": "UNzip COrrupted ZIP file that does not have the central directory records.",
     "homepage": "https://github.com/hymkor/uncozip",
     "license": "MIT License",
     "architecture": {
         "32bit": {
-            "url": "https://github.com/hymkor/uncozip/releases/download/v0.6.1/uncozip-v0.6.1-windows-386.zip",
-            "hash": "16e2e0a827abc10cd33f5f7ce80f860d094f894f75384496d0885d886e6dd0fc"
+            "url": "https://github.com/hymkor/uncozip/releases/download/v0.7.1/uncozip-v0.7.1-windows-386.zip",
+            "hash": "f57d8963ac8c9b21bc59b450a7317b493d8b93d5122b5ec304ee6da36103114a"
         },
         "64bit": {
-            "url": "https://github.com/hymkor/uncozip/releases/download/v0.6.1/uncozip-v0.6.1-windows-amd64.zip",
-            "hash": "9be44da30664b9ecaf329fedd1cd5caedee473097e170493dd3681b3580e1704"
+            "url": "https://github.com/hymkor/uncozip/releases/download/v0.7.1/uncozip-v0.7.1-windows-amd64.zip",
+            "hash": "3e9098a55e7bc196ba41b2ba975e9fde9528a75431d4f72c395b84aba9f246c5"
         }
     },
     "bin": [
