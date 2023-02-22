@@ -1,3 +1,7 @@
+v0.7.1
+======
+Feb 22, 2023
+
 - Command
     - Fix: error message:  
         from `-debug \"%s\" not supported in golang.org/x/text/encoding/ianaindex`  
