@@ -232,16 +232,29 @@ type CorruptedZip struct {
 	LastAccessTime       time.Time
 	CreationTime         time.Time
 
-	OriginalSize   func() uint64
+	// OriginalSize returns the current file's uncompressed size written in "local file header" or "data descriptor".
+	// When an "data descriptor" exists, it waits until file data stream is read all.
+	// This field is sed by Scan method
+	OriginalSize func() uint64
+
+	// CompressedSize returns the current file's uncompressed size written in "local file header" or "data descriptor".
+	// When an "data descriptor" exists, it waits until file data stream is read all.
+	// This field is sed by Scan method
 	CompressedSize func() uint64
-	CRC32          func() uint32
-	hasNextEntry   func() bool
-	bgErr          func() error
-	fnameDecoder   func([]byte) (string, error)
+
+	// CRC32 returns the current file's CRC32 written in "local file header" or "data descriptor".
+	// When an "data descriptor" exists, it waits until file data stream is read all.
+	// This field is sed by Scan method
+	CRC32 func() uint32
+
+	hasNextEntry func() bool
+	bgErr        func() error
+	fnameDecoder func([]byte) (string, error)
 
 	header         _LocalFileHeader
 	passwordHolder _PasswordHolder
 
+	// Debug outputs debug-log. When the field is not set, debug-log is dropped.
 	Debug func(...any) (int, error)
 }
 
@@ -287,6 +300,7 @@ func (cz *CorruptedZip) Body() io.Reader {
 	return r
 }
 
+// IsDir returns true when the current file is a directory.
 func (cz *CorruptedZip) IsDir() bool {
 	return cz.rawFileData == nil
 }
@@ -485,6 +499,7 @@ func readExtendField(r io.Reader, n uint16, cz *CorruptedZip) (err error) {
 	return nil
 }
 
+// Close releases resources used on the Scan method previous called.
 func (cz *CorruptedZip) Close() {
 	for i := len(cz.closers) - 1; i >= 0; i-- {
 		cz.closers[i]()
