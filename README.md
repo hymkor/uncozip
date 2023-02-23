@@ -3,7 +3,7 @@
 uncozip
 =======
 
-This is the tool to UNzip COrrupted ZIP file that does not have the central directory records.
+This is a command and package to UNzip COrrupted ZIP file that does not have the central directory records.
 
 Even when the archive is so large that `zip -FF Corrupted.zip --out New.zip` fails, sometimes uncozip succeeds.  
 ( For example, the case Corrupted.zip is larger than 4GB )
@@ -12,7 +12,7 @@ The uncozip is also useful on non-Windows OSes to unpack archives with non-UTF8 
 (`uncozip -decode Shift_JIS foo.zip`)
 
 Usage
-----------
+-----
 
 ```
 uncozip {OPTIONS} ZIPFILENAME [list...]
@@ -47,3 +47,23 @@ or
 scoop bucket add hymkor https://github.com/hymkor/scoop-bucket
 scoop install uncozip
 ```
+
+package "github.com/hymkor/uncozip"
+===================================
+
+Unlike "[archive/zip]", uncozip can
+
+- read an archive from io.Reader.  
+  ( "[archive/zip]" requires archive's filename[^zip.OpenReader] or io.ReaderAt and size information[^zip.NewReader] )
+- handle encrypted archive.  
+  ( You have to call [RegisterPasswordHandler] )
+- decode filename from any encoding  
+  ( You have to call [RegisterNameDecoder] )
+
+[archive/zip]: https://pkg.go.dev/archive/zip
+[RegisterPasswordHandler]: https://pkg.go.dev/github.com/hymkor/uncozip#CorruptedZip.RegisterPasswordHandler
+[RegisterNameDecoder]: https://pkg.go.dev/github.com/hymkor/uncozip#CorruptedZip.RegisterNameDecoder
+[^zip.OpenReader]: See also https://pkg.go.dev/archive/zip#OpenReader
+[^zip.NewReader]: See also https://pkg.go.dev/archive/zip#NewReader
+
+[Reference](https://pkg.go.dev/github.com/hymkor/uncozip)
