@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -124,9 +125,7 @@ func mainForReader(r io.Reader, patterns []string) error {
 	cz := uncozip.New(r)
 	cz.RegisterPasswordHandler(askPassword)
 	if *flagDebug {
-		cz.Debug = func(args ...any) (int, error) {
-			return fmt.Fprintln(os.Stderr, args...)
-		}
+		cz.Debug = log.Println
 	}
 	if *flagDecode != "" {
 		e, err := ianaindex.IANA.Encoding(*flagDecode)

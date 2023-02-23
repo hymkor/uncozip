@@ -116,7 +116,7 @@ func checkDataDescriptor(buffer []byte) *_DataDescriptor {
 	return &desc
 }
 
-func seekToSignature(r io.ByteReader, w io.Writer, debug func(...any) (int, error)) (bool, *_DataDescriptor, error) {
+func seekToSignature(r io.ByteReader, w io.Writer, debug func(...any)) (bool, *_DataDescriptor, error) {
 	const (
 		max = 100
 		min = sigSize + dataDescriptorSize + sigSize
@@ -244,7 +244,7 @@ type CorruptedZip struct {
 	passwordHolder _PasswordHolder
 
 	// Debug outputs debug-log. When the field is not set, debug-log is dropped.
-	Debug func(...any) (int, error)
+	Debug func(...any)
 }
 
 // originalSize returns the current file's uncompressed size written in "local file header" or "data descriptor".
@@ -327,7 +327,7 @@ func defaultFNameDecoder(b []byte) (string, error) {
 func New(r io.Reader) *CorruptedZip {
 	return &CorruptedZip{
 		br:           bufio.NewReader(r),
-		Debug:        func(...any) (int, error) { return 0, nil },
+		Debug:        func(...any) {},
 		bgErr:        func() error { return nil },
 		hasNextEntry: func() bool { return true },
 		closers:      make([]func(), 0, 2),
