@@ -8,8 +8,7 @@ import (
 	"testing"
 )
 
-func noDebug(...any) (int, error) {
-	return 0, nil
+func noDebug(...any) {
 }
 
 func TestSeekToSignatureForLocalHeader(t *testing.T) {
