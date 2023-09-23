@@ -95,12 +95,12 @@ type _DataDescriptor struct {
 var (
 	sigLocalFileHeader             = []byte{'P', 'K', 3, 4}
 	sigCentralDirectoryHeader      = []byte{'P', 'K', 1, 2}
-	sigEndOfCentralDirectoryRecord = []byte{'P', 'K', 5, 6} // not used.
+	// sigEndOfCentralDirectoryRecord = []byte{'P', 'K', 5, 6} // not used.
 	sigDataDescriptor              = []byte{'P', 'K', 7, 8}
 )
 
 var (
-	ErrLocalFileHeaderSignatureNotFound = errors.New("Signature not found")
+	ErrLocalFileHeaderSignatureNotFound = errors.New("signature not found")
 )
 
 func checkDataDescriptor(buffer []byte) *_DataDescriptor {
@@ -387,26 +387,26 @@ func readTimeStamp(r io.Reader, cz *CorruptedZip) error {
 	var bitflag [1]byte
 	err := binary.Read(r, binary.LittleEndian, &bitflag)
 	if err != nil {
-		return fmt.Errorf("Extended FileStamp bit field can not read: %w", err)
+		return fmt.Errorf("extended fileStamp bit field can not read: %w", err)
 	}
 	if (bitflag[0] & 1) != 0 {
 		cz.LastModificationTime, err = readAsSecondsSince1970(r)
 		if err != nil {
-			return fmt.Errorf("Last Modified DateTime: %w", err)
+			return fmt.Errorf("last modified dateTime: %w", err)
 		}
 		cz.Debug("  Last Modification Time:", cz.LastModificationTime)
 	}
 	if (bitflag[0] & 2) != 0 {
 		cz.LastAccessTime, err = readAsSecondsSince1970(r)
 		if err != nil {
-			return fmt.Errorf("Last Access DateTime: %w", err)
+			return fmt.Errorf("last access dateTime: %w", err)
 		}
 		cz.Debug("  Last Access Time:", cz.LastAccessTime)
 	}
 	if (bitflag[0] & 4) != 0 {
 		cz.CreationTime, err = readAsSecondsSince1970(r)
 		if err != nil {
-			return fmt.Errorf("Creation Time: %w", err)
+			return fmt.Errorf("creation time: %w", err)
 		}
 		cz.Debug("  Create Time:", cz.CreationTime)
 	}
@@ -639,7 +639,7 @@ func (cz *CorruptedZip) scan() (err error) {
 	}
 	cz.closers = append(cz.closers, func() { io.Copy(io.Discard, cz.rawFileData) })
 	if _, ok := decompressors[cz.header.Method]; !ok {
-		return fmt.Errorf("Compression Method(%d) is not supported", cz.header.Method)
+		return fmt.Errorf("compression method(%d) is not supported", cz.header.Method)
 	}
 	return nil
 }
