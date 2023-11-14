@@ -1,3 +1,5 @@
+- uncozip.exe: If the directory part of the name of the file in the ZIP archive does not exist on the destination file system, it will be created instead of ending with an error.
+
 v0.7.1
 ======
 Feb 22, 2023
