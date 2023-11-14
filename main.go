@@ -93,10 +93,10 @@ type _DataDescriptor struct {
 }
 
 var (
-	sigLocalFileHeader             = []byte{'P', 'K', 3, 4}
-	sigCentralDirectoryHeader      = []byte{'P', 'K', 1, 2}
+	sigLocalFileHeader        = []byte{'P', 'K', 3, 4}
+	sigCentralDirectoryHeader = []byte{'P', 'K', 1, 2}
 	// sigEndOfCentralDirectoryRecord = []byte{'P', 'K', 5, 6} // not used.
-	sigDataDescriptor              = []byte{'P', 'K', 7, 8}
+	sigDataDescriptor = []byte{'P', 'K', 7, 8}
 )
 
 var (
