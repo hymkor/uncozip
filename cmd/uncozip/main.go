@@ -91,15 +91,35 @@ func extractEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 	if !matchingPatterns(fname, patterns) {
 		return 0, errSkipEntry
 	}
+	_fname := filepath.FromSlash(fname)
+	fd, err := os.Create(_fname)
+	if err != nil {
+		var pathError *os.PathError
+		if !errors.As(err, &pathError) {
+			return 0, err
+		}
+		dir := filepath.Dir(_fname)
+		if dir == "." {
+			return 0, err
+		}
+		_, err2 := os.Stat(dir)
+		if err2 == nil || !os.IsNotExist(err2) {
+			return 0, err
+		}
+		if err2 := os.MkdirAll(dir, 0750); err2 != nil {
+			return 0, err2
+		}
+		fmt.Fprintf(os.Stderr, "   creating: %s/\n", dir)
+		fd, err = os.Create(_fname)
+		if err != nil {
+			return 0, err
+		}
+	}
 	switch cz.Method() {
 	case uncozip.Deflate:
 		fmt.Fprintln(os.Stderr, "  inflating:", fname)
 	case uncozip.Store:
 		fmt.Fprintln(os.Stderr, " extracting:", fname)
-	}
-	fd, err := os.Create(fname)
-	if err != nil {
-		return 0, err
 	}
 	h := crc32.NewIEEE()
 	_, err = io.Copy(fd, io.TeeReader(cz.Body(), h))
