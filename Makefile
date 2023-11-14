@@ -27,7 +27,8 @@ dist:
 	$(SET) "GOOS=windows" && $(SET) "GOARCH=amd64" && $(MAKE) _dist
 
 release:
-	gh release create -d -t $(VERSION) $(VERSION) $(wildcard $(NAME)-$(VERSION)-*.zip)
+	gh release create -d --notes "" -t $(VERSION) $(VERSION) $(wildcard $(NAME)-$(VERSION)-*.zip)
+
 manifest:
 	make-scoop-manifest *-windows-*.zip > $(NAME).json
 
