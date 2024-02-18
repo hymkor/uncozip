@@ -165,13 +165,13 @@ func mainForReader(r io.Reader, patterns []string) error {
 		})
 	}
 
-	for cz.Scan() {
+	for entry := range cz.Each {
 		var err error
 		var checksum uint32
 		if *flagTest {
-			checksum, err = testEntry(cz, patterns)
+			checksum, err = testEntry(entry, patterns)
 		} else {
-			checksum, err = extractEntry(cz, patterns)
+			checksum, err = extractEntry(entry, patterns)
 		}
 		if err == errSkipEntry {
 			continue
@@ -179,17 +179,17 @@ func mainForReader(r io.Reader, patterns []string) error {
 		if err != nil {
 			return err
 		}
-		if checksum != cz.CRC32() {
+		if checksum != entry.CRC32() {
 			if *flagStrict {
 				return fmt.Errorf("%s: CRC32 is expected %X in header, but %X",
-					cz.Name(), cz.CRC32(), checksum)
+					entry.Name(), entry.CRC32(), checksum)
 			}
 			fmt.Fprintf(os.Stderr,
 				"NG:   %s: CRC32 is expected %X in header, but %X\n",
-				cz.Name(), cz.CRC32(), checksum)
+				entry.Name(), entry.CRC32(), checksum)
 		} else if *flagDebug {
 			fmt.Fprintf(os.Stderr, "%s: CRC32: header=%X , body=%X\n",
-				cz.Name(), cz.CRC32(), checksum)
+				entry.Name(), entry.CRC32(), checksum)
 		}
 	}
 	if err := cz.Err(); err != io.EOF {

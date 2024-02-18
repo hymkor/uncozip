@@ -654,3 +654,19 @@ func (cz *CorruptedZip) Scan() bool {
 	}
 	return err == nil
 }
+
+// Each is the function for rangefunc.
+func (cz *CorruptedZip) Each(f func(*CorruptedZip) bool) {
+	for {
+		err := cz.scan()
+		if err != nil {
+			if err != io.EOF {
+				cz.err = err
+			}
+			break
+		}
+		if !f(cz) {
+			break
+		}
+	}
+}
