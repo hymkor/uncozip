@@ -14,7 +14,7 @@ EXE:=$(shell go env GOEXE)
 all:
 	go fmt
 	$(SET) "CGO_ENABLED=0" && go build $(GOOPT)
-	cd "cmd/uncozip" && go fmt && $(SET) "CGO_ENABLED=0" && go build -o ../../$(NAME)$(EXE) $(GOOPT)
+	cd "cmd/uncozip" && go fmt && $(SET) "CGO_ENABLED=0" && $(SET) "GOEXPERIMENT=rangefunc" & go build -o ../../$(NAME)$(EXE) $(GOOPT)
 
 _dist:
 	$(MAKE) all
