@@ -1,3 +1,9 @@
+- Package:
+    - Add method: Each() for rangefunc of Go 1.22
+    - .gitignore: append suffixes to support [jj]
+
+[jj]: https://martinvonz.github.io/jj/v0.14.0/git-comparison/
+
 v0.7.2
 ======
 Nov 14, 2023
