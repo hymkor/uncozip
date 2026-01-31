@@ -80,10 +80,16 @@ func testEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
 }
 
 func extractEntry(cz *uncozip.CorruptedZip, patterns []string) (uint32, error) {
-	fname := cz.Name()
+	orgfname := cz.Name()
+	fname := uncozip.SanitizePath(orgfname)
+
+	if filepath.Clean(orgfname) != fname {
+		fmt.Fprintf(os.Stderr, "For safety reasons, the path \"%s\" was interpreted as \"%s\".\n", orgfname, fname)
+	}
+
 	if cz.IsDir() {
 		fmt.Fprintln(os.Stderr, "   creating:", fname)
-		if err := os.Mkdir(fname, 0644); err != nil && !os.IsExist(err) {
+		if err := os.MkdirAll(fname, 0644); err != nil && !os.IsExist(err) {
 			return 0, err
 		}
 		return 0, nil

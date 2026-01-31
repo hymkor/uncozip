@@ -1,6 +1,8 @@
+- Sanitize filenames on extraction by replacing `..` with `__` (#1)
 - Package:
     - Add method: Each() for rangefunc of Go 1.22
     - .gitignore: append suffixes to support [jj]
+    - Add `SanitizePath` function (#1)
 
 [jj]: https://martinvonz.github.io/jj/v0.14.0/git-comparison/
 
