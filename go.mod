@@ -1,6 +1,6 @@
 module github.com/hymkor/uncozip
 
-go 1.19
+go 1.23
 
 require (
 	github.com/mattn/go-tty v0.0.4
