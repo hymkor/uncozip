@@ -1,6 +1,10 @@
 Release notes
 =============
 
+v0.7.3
+------
+Jan 31, 2026
+
 - Sanitize filenames on extraction by replacing `..` with `__` (#1)
 - Package:
     - Add method: Each() for rangefunc of Go 1.22
