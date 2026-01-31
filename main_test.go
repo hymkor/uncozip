@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -55,5 +56,26 @@ func TestSeekToSignatureForCentralDirectoryHeader(t *testing.T) {
 	if out := output.String(); out != "HOGEHOGE" {
 		t.Fatalf("output: expect 'HOGEHOGE' but '%s'", out)
 		return
+	}
+}
+
+func TestSanitizePath(t *testing.T) {
+	tests := []struct {
+		in  string
+		out string
+	}{
+		{"../poc/test.txt", "__/poc/test.txt"},
+		{"/etc/passwd", "etc/passwd"},
+		{"a/../../b", "__/b"},
+		{"..", "__"},
+		{"/", "_"},
+		{"", "_"},
+	}
+
+	for _, tt := range tests {
+		out := filepath.FromSlash(tt.out)
+		if got := SanitizePath(tt.in); got != out {
+			t.Errorf("SanitizePath(%q) = %q, want %q", tt.in, got, out)
+		}
 	}
 }

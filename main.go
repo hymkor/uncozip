@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -669,4 +670,14 @@ func (cz *CorruptedZip) Each(f func(*CorruptedZip) bool) {
 			break
 		}
 	}
+}
+
+func SanitizePath(name string) string {
+	name = filepath.Clean(name)
+	name = strings.TrimLeft(name, string(filepath.Separator))
+	name = strings.ReplaceAll(name, "..", "__")
+	if name == "" || name == "." {
+		name = "_"
+	}
+	return name
 }
