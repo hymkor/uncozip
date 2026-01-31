@@ -12,9 +12,9 @@ GOOPT=-ldflags "-s -w -X main.version=$(VERSION)"
 EXE:=$(shell go env GOEXE)
 
 all:
-	go fmt
+	go fmt ./...
 	$(SET) "CGO_ENABLED=0" && go build $(GOOPT)
-	cd "cmd/uncozip" && go fmt && $(SET) "CGO_ENABLED=0" && $(SET) "GOEXPERIMENT=rangefunc" & go build -o ../../$(NAME)$(EXE) $(GOOPT)
+	$(SET) "CGO_ENABLED=0" && go build -C "cmd/uncozip" -o $(CURDIR) $(GOOPT)
 
 _dist:
 	$(MAKE) all
@@ -27,7 +27,7 @@ dist:
 	$(SET) "GOOS=windows" && $(SET) "GOARCH=amd64" && $(MAKE) _dist
 
 release:
-	gh release create -d --notes "" -t $(VERSION) $(VERSION) $(wildcard $(NAME)-$(VERSION)-*.zip)
+	pwsh -Command "latest-notes.ps1" | gh release create -d --notes-file - -t $(VERSION) $(VERSION) $(wildcard $(NAME)-$(VERSION)-*.zip)
 
 manifest:
 	make-scoop-manifest *-windows-*.zip > $(NAME).json
